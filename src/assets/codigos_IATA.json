@@ -1,0 +1,2487 @@
+[
+  {
+    "ciudad": "ABADAN",
+    "codigo": "ABD",
+    "pais": "IRAN"
+  },
+  {
+    "ciudad": "ABIDJAN",
+    "codigo": "ABJ",
+    "pais": "COSTA DE MARFIL"
+  },
+  {
+    "ciudad": "ABU DHABI",
+    "codigo": "AUH",
+    "pais": "EMIRATOS ARABES"
+  },
+  {
+    "ciudad": "ACAPULCO",
+    "codigo": "ACA",
+    "pais": "MEXICO"
+  },
+  {
+    "ciudad": "ACCRA",
+    "codigo": "ACC",
+    "pais": "GHANA"
+  },
+  {
+    "ciudad": "ADDIS ABEBA",
+    "codigo": "ADD",
+    "pais": "ETIOPIA"
+  },
+  {
+    "ciudad": "ADELAIDE",
+    "codigo": "ADL",
+    "pais": "AUSTRALIA"
+  },
+  {
+    "ciudad": "ALEJANDRIA",
+    "codigo": "ALY",
+    "pais": "EGIPTO"
+  },
+  {
+    "ciudad": "ALEPRO",
+    "codigo": "ALP",
+    "pais": "SIRIA"
+  },
+  {
+    "ciudad": "ALTO RI O SENGUERR",
+    "codigo": "ARR",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "AMMAN",
+    "codigo": "AMM",
+    "pais": "JORDANIA"
+  },
+  {
+    "ciudad": "AMSTERDAM",
+    "codigo": "AMS",
+    "pais": "HOLANDA"
+  },
+  {
+    "ciudad": "ANCHORAGE , ALASKA",
+    "codigo": "ANC",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "ANKARA",
+    "codigo": "ANK",
+    "pais": "TURQUIA"
+  },
+  {
+    "ciudad": "ANTANANARIVO",
+    "codigo": "TNR",
+    "pais": "MADAGASCAR"
+  },
+  {
+    "ciudad": "ANTIGUA",
+    "codigo": "ANU",
+    "pais": "ANTIGUA Y BARBUDA"
+  },
+  {
+    "ciudad": "ANTOFAGASTA",
+    "codigo": "ANF",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "APIA",
+    "codigo": "APW",
+    "pais": "SAMOA O."
+  },
+  {
+    "ciudad": "ARACAJU",
+    "codigo": "AJU",
+    "pais": "SE - BRASIL"
+  },
+  {
+    "ciudad": "AREQUIPA",
+    "codigo": "AQP",
+    "pais": "PERO"
+  },
+  {
+    "ciudad": "ARGEL",
+    "codigo": "ALG",
+    "pais": "ARGELIA"
+  },
+  {
+    "ciudad": "ARICA",
+    "codigo": "ARI",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "ARUBA",
+    "codigo": "AUA",
+    "pais": "ANTILLAS HOLANDESAS"
+  },
+  {
+    "ciudad": "ASMARA",
+    "codigo": "ASM",
+    "pais": "ETIOPIA"
+  },
+  {
+    "ciudad": "ASUNCION",
+    "codigo": "ASU",
+    "pais": "PARAGUAY"
+  },
+  {
+    "ciudad": "ATENAS",
+    "codigo": "ATH",
+    "pais": "GRECIA"
+  },
+  {
+    "ciudad": "ATLANTA",
+    "codigo": "ATL",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "AUCKLAND",
+    "codigo": "AKL",
+    "pais": "NUEVA ZELANDA"
+  },
+  {
+    "ciudad": "AYACUCHO",
+    "codigo": "AYP",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "BAGDAD",
+    "codigo": "BGW",
+    "pais": "IRAK"
+  },
+  {
+    "ciudad": "BAHIA BLANCA",
+    "codigo": "BHI",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "BAHREIN",
+    "codigo": "BAH",
+    "pais": "BAHREIN"
+  },
+  {
+    "ciudad": "BALMACEDA",
+    "codigo": "BBA",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "BALTIMORE",
+    "codigo": "BWI",
+    "pais": "MARYLAND, U.S.A."
+  },
+  {
+    "ciudad": "BAMAKO",
+    "codigo": "BKO",
+    "pais": "MALI"
+  },
+  {
+    "ciudad": "BANGKOK",
+    "codigo": "BKK",
+    "pais": "THAILANDIA"
+  },
+  {
+    "ciudad": "BANGUI",
+    "codigo": "BGF",
+    "pais": "REP. CENTROAFRICANA"
+  },
+  {
+    "ciudad": "BANJUL",
+    "codigo": "BJL",
+    "pais": "GAMBIA"
+  },
+  {
+    "ciudad": "BARBADOS",
+    "codigo": "BGI",
+    "pais": "BARBADOS, ANTILLAS"
+  },
+  {
+    "ciudad": "BARCELONA",
+    "codigo": "BCN",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "BARCELONA",
+    "codigo": "BLA",
+    "pais": "VENEZUELA"
+  },
+  {
+    "ciudad": "BARILOCHE",
+    "codigo": "BRC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "BARRANQUILLA",
+    "codigo": "BAQ",
+    "pais": "COLOMBIA"
+  },
+  {
+    "ciudad": "BASRA",
+    "codigo": "BSR",
+    "pais": "IRAQ"
+  },
+  {
+    "ciudad": "BEIRUT",
+    "codigo": "BEI",
+    "pais": "LIBANO"
+  },
+  {
+    "ciudad": "BEIRUT",
+    "codigo": "BEY",
+    "pais": "LIBANO"
+  },
+  {
+    "ciudad": "BELEM",
+    "codigo": "BEL",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "BELGRADO",
+    "codigo": "BEG",
+    "pais": "YUGOSLAVIA"
+  },
+  {
+    "ciudad": "BELO HORIZONTE",
+    "codigo": "BHZ",
+    "pais": "BRAZIL"
+  },
+  {
+    "ciudad": "BENGHAZI",
+    "codigo": "BEN",
+    "pais": "LIBIA"
+  },
+  {
+    "ciudad": "BERGEN",
+    "codigo": "BGO",
+    "pais": "NORUEGA"
+  },
+  {
+    "ciudad": "BERLIN",
+    "codigo": "BER",
+    "pais": "ALEMANIA"
+  },
+  {
+    "ciudad": "BILBAO",
+    "codigo": "BIO",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "BLANTYRE",
+    "codigo": "BLZ",
+    "pais": "MALAWI"
+  },
+  {
+    "ciudad": "BOGOTA",
+    "codigo": "BOG",
+    "pais": "COLOMBIA"
+  },
+  {
+    "ciudad": "BOLIVAR",
+    "codigo": "BLR",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "BOLOGNA",
+    "codigo": "BLQ",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "BOMBAY",
+    "codigo": "BOM",
+    "pais": "INDIA"
+  },
+  {
+    "ciudad": "BONAIRE",
+    "codigo": "BON",
+    "pais": "ANTILLAS HOLANDESAS"
+  },
+  {
+    "ciudad": "BOSTON",
+    "codigo": "BOS",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "BRASILIA",
+    "codigo": "BSB",
+    "pais": "DF, BRASIL"
+  },
+  {
+    "ciudad": "BRATISLAVA",
+    "codigo": "BTS",
+    "pais": "CHECOSLOVAQUIA"
+  },
+  {
+    "ciudad": "BRAZZAVILLE",
+    "codigo": "BZV",
+    "pais": "REP. POP. DEL CONGO"
+  },
+  {
+    "ciudad": "BRISBANE",
+    "codigo": "BNE",
+    "pais": "AUSTRALIA"
+  },
+  {
+    "ciudad": "BRUSELAS",
+    "codigo": "BRU",
+    "pais": "BELGICA"
+  },
+  {
+    "ciudad": "BUCAREST",
+    "codigo": "BUH",
+    "pais": "RUMANIA"
+  },
+  {
+    "ciudad": "BUDAPEST",
+    "codigo": "BUD",
+    "pais": "HUNGRIA"
+  },
+  {
+    "ciudad": "BUENOS AIRES",
+    "codigo": "BUE",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "BUENOS AIRES",
+    "codigo": "BUE",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "BUFFALO",
+    "codigo": "BNF",
+    "pais": "NUEVA YORK, U.S.A."
+  },
+  {
+    "ciudad": "BUJUMBURA",
+    "codigo": "BJM",
+    "pais": "BURUNDI"
+  },
+  {
+    "ciudad": "BUKAVU",
+    "codigo": "BKY",
+    "pais": "ZAIRE"
+  },
+  {
+    "ciudad": "BULAWAYO",
+    "codigo": "BUQ",
+    "pais": "ZIMBAWE"
+  },
+  {
+    "ciudad": "B.SERI BEGAWAN",
+    "codigo": "BWN",
+    "pais": "BRUNEI"
+  },
+  {
+    "ciudad": "CAIRNS",
+    "codigo": "CNS",
+    "pais": "AUSTRALIA"
+  },
+  {
+    "ciudad": "CALAMA",
+    "codigo": "CJC",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "CALCUTA",
+    "codigo": "CCU",
+    "pais": "INDIA"
+  },
+  {
+    "ciudad": "CALGARY",
+    "codigo": "YYC",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "CALI",
+    "codigo": "CLO",
+    "pais": "COLOMBIA"
+  },
+  {
+    "ciudad": "CANCUN",
+    "codigo": "CUN",
+    "pais": "MEXICO"
+  },
+  {
+    "ciudad": "CAPE TOWN",
+    "codigo": "CPT",
+    "pais": "SUD AFRICA"
+  },
+  {
+    "ciudad": "CARACAS",
+    "codigo": "CCS",
+    "pais": "VENEZUELA"
+  },
+  {
+    "ciudad": "CARTAGENA",
+    "codigo": "CTG",
+    "pais": "COLOMBIA"
+  },
+  {
+    "ciudad": "CASABLANCA",
+    "codigo": "CAS",
+    "pais": "MARRUECOS"
+  },
+  {
+    "ciudad": "CATAMARCA",
+    "codigo": "CTC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CATANIA",
+    "codigo": "CAT",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "CAVIAHUE",
+    "codigo": "CVH",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CAYENA",
+    "codigo": "CAY",
+    "pais": "GUAYANA FRANCESA"
+  },
+  {
+    "ciudad": "CAYO LARGO",
+    "codigo": "CYL",
+    "pais": "CUBA"
+  },
+  {
+    "ciudad": "CEBU",
+    "codigo": "CEB",
+    "pais": "FILIPINAS"
+  },
+  {
+    "ciudad": "CHAPELCO",
+    "codigo": "CPC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CHICAGO",
+    "codigo": "CHI",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "CHICAGO",
+    "codigo": "CHI",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "CHICAGO",
+    "codigo": "CHI",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "CHICLAYO",
+    "codigo": "CIX",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "CHOELE CHOEL",
+    "codigo": "OEL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CHOS MALAL",
+    "codigo": "CHM",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CHRISTCHURCH",
+    "codigo": "CHC",
+    "pais": "NUEVA ZELANDA"
+  },
+  {
+    "ciudad": "CINCINNATI",
+    "codigo": "CVG",
+    "pais": "OHIO, U.S.A."
+  },
+  {
+    "ciudad": "CLEVELAND",
+    "codigo": "CLE",
+    "pais": "OHIO, U.S.A."
+  },
+  {
+    "ciudad": "COCHABAMBA",
+    "codigo": "CBB",
+    "pais": "BOLIVIA"
+  },
+  {
+    "ciudad": "COLOMBO",
+    "codigo": "CMB",
+    "pais": "SRI LANKA"
+  },
+  {
+    "ciudad": "COLONIA",
+    "codigo": "CGN",
+    "pais": "ALEMANIA"
+  },
+  {
+    "ciudad": "COLONIA",
+    "codigo": "CYR",
+    "pais": "URUGUAY"
+  },
+  {
+    "ciudad": "COLONIA CATRIEL",
+    "codigo": "CLT",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "COLUMBUS",
+    "codigo": "CMH",
+    "pais": "OHIO, U.S.A."
+  },
+  {
+    "ciudad": "COMODORO RIVADAVIA",
+    "codigo": "CRD",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CONAKRI",
+    "codigo": "CKY",
+    "pais": "GUINEA"
+  },
+  {
+    "ciudad": "CONCEPCION",
+    "codigo": "CCP",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "CONCORDIA",
+    "codigo": "COC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "COPENHAGUE",
+    "codigo": "CPH",
+    "pais": "DINAMARCA"
+  },
+  {
+    "ciudad": "COPENHAGUE",
+    "codigo": "CPH",
+    "pais": "DINAMARCA"
+  },
+  {
+    "ciudad": "COPIAPO",
+    "codigo": "CPO",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "CORDOBA",
+    "codigo": "COR",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CORONEL SUAREZ",
+    "codigo": "CSU",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CORONEL SUAREZ",
+    "codigo": "SUZ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CORRIENTES",
+    "codigo": "CNQ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "COTONOU",
+    "codigo": "COO",
+    "pais": "BENIN"
+  },
+  {
+    "ciudad": "CUIABA",
+    "codigo": "CGB",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "CURACAO",
+    "codigo": "CUR",
+    "pais": "ANTILLAS"
+  },
+  {
+    "ciudad": "CURITIBA",
+    "codigo": "CWB",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "CUTRAL-CO",
+    "codigo": "CUT",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "CUZCO",
+    "codigo": "CUZ",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "DAKAR",
+    "codigo": "DKR",
+    "pais": "SENEGAL"
+  },
+  {
+    "ciudad": "DALIAN",
+    "codigo": "DLC",
+    "pais": "REP. POP. CHINA"
+  },
+  {
+    "ciudad": "DALLAS/FORT WORTH",
+    "codigo": "DFW",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "DALLAS/FORT WORTH",
+    "codigo": "DFW",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "DAMASCO",
+    "codigo": "DAM",
+    "pais": "SIRIA"
+  },
+  {
+    "ciudad": "DAR ES SALAAM",
+    "codigo": "DAR",
+    "pais": "TANZANIA"
+  },
+  {
+    "ciudad": "DAYTON",
+    "codigo": "DAY",
+    "pais": "OHAIO - USA"
+  },
+  {
+    "ciudad": "DELHI",
+    "codigo": "DEL",
+    "pais": "INDIA"
+  },
+  {
+    "ciudad": "DENPASAR-BALI",
+    "codigo": "DPS",
+    "pais": "INDONESIA"
+  },
+  {
+    "ciudad": "DENVER",
+    "codigo": "DEN",
+    "pais": "COLORADO, U.S.A."
+  },
+  {
+    "ciudad": "DETROIT",
+    "codigo": "DTT",
+    "pais": "MICHIGAN, U.S.A."
+  },
+  {
+    "ciudad": "DHAHRAN",
+    "codigo": "DHA",
+    "pais": "ARABIA SAUDITA"
+  },
+  {
+    "ciudad": "DHAKA",
+    "codigo": "DAC",
+    "pais": "BANGLADESH"
+  },
+  {
+    "ciudad": "DIRE DAWA",
+    "codigo": "DIR",
+    "pais": "ETIOPIA"
+  },
+  {
+    "ciudad": "DJIBOUTI",
+    "codigo": "JIB",
+    "pais": "DJIBOUTI"
+  },
+  {
+    "ciudad": "DOHA",
+    "codigo": "DOH",
+    "pais": "QATAR"
+  },
+  {
+    "ciudad": "DOUALA",
+    "codigo": "DLA",
+    "pais": "CAMERUN"
+  },
+  {
+    "ciudad": "DUBAI",
+    "codigo": "DXB",
+    "pais": "EMIRATOS A. UNIDOS"
+  },
+  {
+    "ciudad": "DUBLIN",
+    "codigo": "DUB",
+    "pais": "IRLANDA"
+  },
+  {
+    "ciudad": "DUBROVNIK",
+    "codigo": "DBV",
+    "pais": "CROACIA"
+  },
+  {
+    "ciudad": "DUSSELDORF",
+    "codigo": "DUS",
+    "pais": "ALEMANIA"
+  },
+  {
+    "ciudad": "EDMONTON",
+    "codigo": "YEG",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "EL BOLSON",
+    "codigo": "EHL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "EL CAIRO",
+    "codigo": "CAI",
+    "pais": "EGIPTO"
+  },
+  {
+    "ciudad": "EL CALAFATE",
+    "codigo": "CLF",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "EL CHALTEN",
+    "codigo": "ECL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "EL MAITEN",
+    "codigo": "EMX",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "EL SALVADOR",
+    "codigo": "ESR",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "ENTEBE",
+    "codigo": "EBB",
+    "pais": "UGANDA"
+  },
+  {
+    "ciudad": "ESMIRNA",
+    "codigo": "IZM",
+    "pais": "TURQUIA"
+  },
+  {
+    "ciudad": "ESQUEL",
+    "codigo": "EQS",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "ESTAMBUL",
+    "codigo": "IST",
+    "pais": "TURQUIA"
+  },
+  {
+    "ciudad": "ESTOCOLMO",
+    "codigo": "STO",
+    "pais": "SUECIA"
+  },
+  {
+    "ciudad": "ESTRASBURGO",
+    "codigo": "SXB",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "FARO",
+    "codigo": "FAO",
+    "pais": "PORTUGAL"
+  },
+  {
+    "ciudad": "FILADELFIA",
+    "codigo": "PHL",
+    "pais": "PENNSYLVANIA, U.S.A"
+  },
+  {
+    "ciudad": "FLORIANOPOLIS",
+    "codigo": "FLN",
+    "pais": "BRAZIL"
+  },
+  {
+    "ciudad": "FORMOSA",
+    "codigo": "FMA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "FORT DE FRANCE",
+    "codigo": "FDF",
+    "pais": "MARTINICA"
+  },
+  {
+    "ciudad": "FORT LAUDERDALE, FLORIDA",
+    "codigo": "FLL",
+    "pais": "E.E.U.U."
+  },
+  {
+    "ciudad": "FORT LAUDERDALE, FLORIDA",
+    "codigo": "FLL",
+    "pais": "E.E.U.U."
+  },
+  {
+    "ciudad": "FORTALEZA",
+    "codigo": "FOR",
+    "pais": "CE, BRASIL"
+  },
+  {
+    "ciudad": "FRANKFURT",
+    "codigo": "FRA",
+    "pais": "ALEMANIA"
+  },
+  {
+    "ciudad": "FREETOWN",
+    "codigo": "FNA",
+    "pais": "SIERRA LEONA"
+  },
+  {
+    "ciudad": "FUKUOKA",
+    "codigo": "FUK",
+    "pais": "JAPON"
+  },
+  {
+    "ciudad": "FUNCHAL",
+    "codigo": "FNC",
+    "pais": "IS. MADEIRA, PORTUGAL"
+  },
+  {
+    "ciudad": "GABORONE",
+    "codigo": "GBE",
+    "pais": "BOTSWANA"
+  },
+  {
+    "ciudad": "GENERAL PICO",
+    "codigo": "GPO",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "GENERAL ROCA",
+    "codigo": "GNR",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "GENOVA",
+    "codigo": "GOA",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "GEORGETOWN",
+    "codigo": "GEO",
+    "pais": "GUYANA"
+  },
+  {
+    "ciudad": "GIBRALTAR",
+    "codigo": "GIB",
+    "pais": "GIBRALTAR"
+  },
+  {
+    "ciudad": "GINEBRA",
+    "codigo": "GVA",
+    "pais": "SUIZA"
+  },
+  {
+    "ciudad": "GOBERNADOR GREGORES",
+    "codigo": "GGS",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "GOIANIA",
+    "codigo": "GYN",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "GOTEMBURGO",
+    "codigo": "GOT",
+    "pais": "SUECIA"
+  },
+  {
+    "ciudad": "GOYA",
+    "codigo": "OYA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "GRAZ",
+    "codigo": "GRZ",
+    "pais": "AUSTRIA"
+  },
+  {
+    "ciudad": "GUAM",
+    "codigo": "GUM",
+    "pais": "GUAM"
+  },
+  {
+    "ciudad": "GUANGZHOU",
+    "codigo": "CAN",
+    "pais": "REP. POP. CHINA"
+  },
+  {
+    "ciudad": "GUATEMALA",
+    "codigo": "GUA",
+    "pais": "GUATEMALA"
+  },
+  {
+    "ciudad": "GUATEMALA",
+    "codigo": "OUA",
+    "pais": "GUATEMALA"
+  },
+  {
+    "ciudad": "GUAYAQUIL",
+    "codigo": "GYE",
+    "pais": "ECUADOR"
+  },
+  {
+    "ciudad": "HABANA",
+    "codigo": "HAV",
+    "pais": "CUBA"
+  },
+  {
+    "ciudad": "HAMBURGO",
+    "codigo": "HAM",
+    "pais": "ALEMANIA FEDERAL"
+  },
+  {
+    "ciudad": "HANOI",
+    "codigo": "HAN",
+    "pais": "VIETNAM"
+  },
+  {
+    "ciudad": "HARARE",
+    "codigo": "HRE",
+    "pais": "ZIMBAWE"
+  },
+  {
+    "ciudad": "HARTFORD",
+    "codigo": "BDL",
+    "pais": "CONNECTICUT, U.S.A."
+  },
+  {
+    "ciudad": "HELSINKI",
+    "codigo": "HEL",
+    "pais": "FINLANDIA"
+  },
+  {
+    "ciudad": "HO CHI MINH",
+    "codigo": "SGN",
+    "pais": "VIETNAM"
+  },
+  {
+    "ciudad": "HONG KONG",
+    "codigo": "HKG",
+    "pais": "HONG KONG"
+  },
+  {
+    "ciudad": "HONOLULU ( HAWAII )",
+    "codigo": "HNL",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "HORTA",
+    "codigo": "HOR",
+    "pais": "IS. AZORES, PORTUGAL"
+  },
+  {
+    "ciudad": "HOUSTON",
+    "codigo": "HOU",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "HOUSTON",
+    "codigo": "HOU",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "IGUACU",
+    "codigo": "IGU",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "IGUAZU",
+    "codigo": "IGR",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "ILHA DO SAL",
+    "codigo": "ILH",
+    "pais": "CABO VERDE"
+  },
+  {
+    "ciudad": "ILHA DO SAL",
+    "codigo": "SID",
+    "pais": "CABO VERDE"
+  },
+  {
+    "ciudad": "INDIANAPOLIS",
+    "codigo": "IND",
+    "pais": "INDIANA, U.S.A."
+  },
+  {
+    "ciudad": "INGENIERO JACOBACCI",
+    "codigo": "IJC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "IQUIQUE",
+    "codigo": "IQQ",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "IQUITOS",
+    "codigo": "IQT",
+    "pais": "PERO"
+  },
+  {
+    "ciudad": "ISLA DE PASCUA",
+    "codigo": "IPC",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "ISLAMABAD",
+    "codigo": "ISB",
+    "pais": "PAKISTAN"
+  },
+  {
+    "ciudad": "JAKARTA",
+    "codigo": "JKT",
+    "pais": "INDONESIA"
+  },
+  {
+    "ciudad": "JEDDAH",
+    "codigo": "JED",
+    "pais": "ARABIA SAUDITA"
+  },
+  {
+    "ciudad": "JERUSALEM",
+    "codigo": "JRS",
+    "pais": "ISRAEL"
+  },
+  {
+    "ciudad": "JOAO PESSOA",
+    "codigo": "JPA",
+    "pais": "PB, BRASIL"
+  },
+  {
+    "ciudad": "JOHANNESBURGO",
+    "codigo": "JNB",
+    "pais": "SUD AFRICA"
+  },
+  {
+    "ciudad": "JOSE DE SAN MARTIN",
+    "codigo": "JSM",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "JUJUY",
+    "codigo": "JUJ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "KABUL",
+    "codigo": "KBL",
+    "pais": "AFGANISTAN"
+  },
+  {
+    "ciudad": "KANO",
+    "codigo": "KAN",
+    "pais": "NIGERIA"
+  },
+  {
+    "ciudad": "KANSAS",
+    "codigo": "MKC",
+    "pais": "MISSOURI - USA"
+  },
+  {
+    "ciudad": "KAOHSIUNG",
+    "codigo": "KHH",
+    "pais": "TAIWAN"
+  },
+  {
+    "ciudad": "KARACHI",
+    "codigo": "KHI",
+    "pais": "PAKISTAN"
+  },
+  {
+    "ciudad": "KATMANDU",
+    "codigo": "KTM",
+    "pais": "NEPAL"
+  },
+  {
+    "ciudad": "KHARTUM",
+    "codigo": "KRT",
+    "pais": "SUDAN"
+  },
+  {
+    "ciudad": "KIGALI",
+    "codigo": "KGL",
+    "pais": "RWANDA"
+  },
+  {
+    "ciudad": "KINGSTON",
+    "codigo": "KIN",
+    "pais": "JAMAICA"
+  },
+  {
+    "ciudad": "KINSHASA",
+    "codigo": "FIH",
+    "pais": "ZAIRE"
+  },
+  {
+    "ciudad": "KLAGENFURT",
+    "codigo": "KLU",
+    "pais": "AUSTRIA"
+  },
+  {
+    "ciudad": "KOTA KINABALU",
+    "codigo": "BKI",
+    "pais": "MALASIA"
+  },
+  {
+    "ciudad": "KRISTIANSAND",
+    "codigo": "KRS",
+    "pais": "NORUEGA"
+  },
+  {
+    "ciudad": "KUALA LUMPUR",
+    "codigo": "JUL",
+    "pais": "MALASIA"
+  },
+  {
+    "ciudad": "KUALA LUMPUR",
+    "codigo": "KUL",
+    "pais": "MALASIA"
+  },
+  {
+    "ciudad": "KUWAIT",
+    "codigo": "KWI",
+    "pais": "KUWAIT"
+  },
+  {
+    "ciudad": "LA CEIBA",
+    "codigo": "LCE",
+    "pais": "HONDURAS"
+  },
+  {
+    "ciudad": "LA CORUÑA",
+    "codigo": "LCG",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "LA PAZ",
+    "codigo": "LPB",
+    "pais": "BOLIVIA"
+  },
+  {
+    "ciudad": "LA PLATA",
+    "codigo": "LPG",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "LA RIOJA",
+    "codigo": "IRJ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "LA SERENA",
+    "codigo": "LSC",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "LAGO ARGENTINO",
+    "codigo": "ING",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "LAGOS",
+    "codigo": "LOS",
+    "pais": "NIGERIA"
+  },
+  {
+    "ciudad": "LAMEZIA TERME",
+    "codigo": "SUF",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "LARNACA",
+    "codigo": "LCA",
+    "pais": "CHIPRE"
+  },
+  {
+    "ciudad": "LAS HERAS",
+    "codigo": "CHS",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "LAS PALMAS",
+    "codigo": "LPA",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "LAS VEGAS",
+    "codigo": "LAS",
+    "pais": "NEVADA - USA"
+  },
+  {
+    "ciudad": "LIBREVILLE",
+    "codigo": "LBV",
+    "pais": "GABON"
+  },
+  {
+    "ciudad": "LILLE",
+    "codigo": "LIL",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "LILONGWE",
+    "codigo": "LLW",
+    "pais": "MALAWI"
+  },
+  {
+    "ciudad": "LIMA",
+    "codigo": "LIM",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "LINZ",
+    "codigo": "LNZ",
+    "pais": "AUSTRIA"
+  },
+  {
+    "ciudad": "LISBOA",
+    "codigo": "LIS",
+    "pais": "PORTUGAL"
+  },
+  {
+    "ciudad": "LJUBLJANA",
+    "codigo": "LJU",
+    "pais": "ESLOVENIA"
+  },
+  {
+    "ciudad": "LOME",
+    "codigo": "LFW",
+    "pais": "TOGO"
+  },
+  {
+    "ciudad": "LONCOPUE",
+    "codigo": "LCP",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "LONDRES",
+    "codigo": "LON",
+    "pais": "INGLATERRA"
+  },
+  {
+    "ciudad": "LONDRES",
+    "codigo": "LON",
+    "pais": "INGLATERRA"
+  },
+  {
+    "ciudad": "LOS ANGELES",
+    "codigo": "LAX",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "LOS ANGELES",
+    "codigo": "LSQ",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "LUANDA",
+    "codigo": "LAD",
+    "pais": "ANGOLA"
+  },
+  {
+    "ciudad": "LUBUMBASHI",
+    "codigo": "FBM",
+    "pais": "ZAIRE"
+  },
+  {
+    "ciudad": "LUSAKA",
+    "codigo": "LUN",
+    "pais": "ZAMBIA"
+  },
+  {
+    "ciudad": "LUXEMBURGO",
+    "codigo": "LUX",
+    "pais": "LUXEMBURGO"
+  },
+  {
+    "ciudad": "LYON",
+    "codigo": "LYS",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "MACAPA",
+    "codigo": "MCP",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "MACEIO",
+    "codigo": "MCZ",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "MADRAS",
+    "codigo": "MAA",
+    "pais": "INDIA"
+  },
+  {
+    "ciudad": "MADRID",
+    "codigo": "MAD",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "MALAGA",
+    "codigo": "AGP",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "MALARGUE",
+    "codigo": "MLG",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "MALMO",
+    "codigo": "MMA",
+    "pais": "SUECIA"
+  },
+  {
+    "ciudad": "MALTA",
+    "codigo": "MLA",
+    "pais": "MALTA"
+  },
+  {
+    "ciudad": "MANAGUA",
+    "codigo": "MGA",
+    "pais": "NICARAGUA"
+  },
+  {
+    "ciudad": "MANAOS",
+    "codigo": "MAO",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "MANILA",
+    "codigo": "MNL",
+    "pais": "FILIPINAS"
+  },
+  {
+    "ciudad": "MAPUTO",
+    "codigo": "MPM",
+    "pais": "MOZAMBIQUE"
+  },
+  {
+    "ciudad": "MAR DEL PLATA",
+    "codigo": "MDQ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "MARACAIBO",
+    "codigo": "MAR",
+    "pais": "VENEZUELA"
+  },
+  {
+    "ciudad": "MARSELLA",
+    "codigo": "MRS",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "MASCATE",
+    "codigo": "MCT",
+    "pais": "OMAN"
+  },
+  {
+    "ciudad": "MAURICIO",
+    "codigo": "MRU",
+    "pais": "IS. MAURICIO"
+  },
+  {
+    "ciudad": "MEDELLIN",
+    "codigo": "MDE",
+    "pais": "COLOMBIA"
+  },
+  {
+    "ciudad": "MELBOURNE",
+    "codigo": "MEL",
+    "pais": "AUSTRALIA"
+  },
+  {
+    "ciudad": "MENDOZA",
+    "codigo": "MDZ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "MENPHIS",
+    "codigo": "MEM",
+    "pais": "TENNESSE, U.S.A."
+  },
+  {
+    "ciudad": "MERIDA",
+    "codigo": "MID",
+    "pais": "MEXICO"
+  },
+  {
+    "ciudad": "MEXICO",
+    "codigo": "MEX",
+    "pais": "MEXICO"
+  },
+  {
+    "ciudad": "MIAMI",
+    "codigo": "MIA",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "MILAN",
+    "codigo": "MIL",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "MILAN",
+    "codigo": "MIL",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "MILWAUKEE",
+    "codigo": "MKE",
+    "pais": "WISCONSIN, U.S.A."
+  },
+  {
+    "ciudad": "MINNEAPOLIS",
+    "codigo": "MSP",
+    "pais": "MINNESOTA, U.S.A."
+  },
+  {
+    "ciudad": "MONROVIA",
+    "codigo": "MLW",
+    "pais": "LIBERIA"
+  },
+  {
+    "ciudad": "MONTEGO BAY",
+    "codigo": "MBJ",
+    "pais": "JAMAICA"
+  },
+  {
+    "ciudad": "MONTEVIDEO",
+    "codigo": "MVD",
+    "pais": "URUGUAY"
+  },
+  {
+    "ciudad": "MONTREAL",
+    "codigo": "YUL",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "MONTREAL",
+    "codigo": "YUL",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "MOSCU",
+    "codigo": "MOW",
+    "pais": "U.R.S.S."
+  },
+  {
+    "ciudad": "MULHOUSE",
+    "codigo": "MLH",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "MUNICH",
+    "codigo": "MUC",
+    "pais": "ALEMANIA FEDERAL"
+  },
+  {
+    "ciudad": "NADI",
+    "codigo": "NAN",
+    "pais": "FIJI"
+  },
+  {
+    "ciudad": "NAGOYA",
+    "codigo": "NGO",
+    "pais": "JAPON"
+  },
+  {
+    "ciudad": "NAPOLES",
+    "codigo": "NAP",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "NASHVILLE",
+    "codigo": "BNA",
+    "pais": "TENNESSEE - USA"
+  },
+  {
+    "ciudad": "NASSAU",
+    "codigo": "NAS",
+    "pais": "BAHAMAS"
+  },
+  {
+    "ciudad": "NATAL",
+    "codigo": "NAT",
+    "pais": "RN, BRASIL"
+  },
+  {
+    "ciudad": "NECOCHEA",
+    "codigo": "NEC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "NEUQUEN",
+    "codigo": "NQN",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "NIAMEI",
+    "codigo": "NIM",
+    "pais": "NIGERIA"
+  },
+  {
+    "ciudad": "NICOSIA",
+    "codigo": "NIC",
+    "pais": "CHIPRE"
+  },
+  {
+    "ciudad": "NIUE",
+    "codigo": "IUE",
+    "pais": "ISLA NIUE"
+  },
+  {
+    "ciudad": "NIZA",
+    "codigo": "NCE",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "NORFOLK",
+    "codigo": "ORF",
+    "pais": "VIRGINIA - USA"
+  },
+  {
+    "ciudad": "NOUAKCHOTT",
+    "codigo": "NKC",
+    "pais": "MAURITANIA"
+  },
+  {
+    "ciudad": "NOUMEA",
+    "codigo": "NOU",
+    "pais": "NUEVA CALEDONIA"
+  },
+  {
+    "ciudad": "NUEVA ORLEANS",
+    "codigo": "MSY",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "NUEVA YORK",
+    "codigo": "NYC",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "NUEVA YORK",
+    "codigo": "NYC",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "NUEVA YORK",
+    "codigo": "NYC",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "NDJAMENA",
+    "codigo": "NDJ",
+    "pais": "CHAD"
+  },
+  {
+    "ciudad": "ODESSA",
+    "codigo": "ODS",
+    "pais": "C.E.I."
+  },
+  {
+    "ciudad": "OKINAWA",
+    "codigo": "OKA",
+    "pais": "JAPON"
+  },
+  {
+    "ciudad": "OLAVARRIA",
+    "codigo": "OLC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "OPORTO",
+    "codigo": "OPO",
+    "pais": "PORTUGAL"
+  },
+  {
+    "ciudad": "ORLANDO",
+    "codigo": "ORL",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "ORLANDO",
+    "codigo": "ORL",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "OSAKA",
+    "codigo": "OSA",
+    "pais": "JAPON"
+  },
+  {
+    "ciudad": "OSLO",
+    "codigo": "OSL",
+    "pais": "NORUEGA"
+  },
+  {
+    "ciudad": "OSLO",
+    "codigo": "OSL",
+    "pais": "NORUEGA"
+  },
+  {
+    "ciudad": "OSORNO",
+    "codigo": "ZOS",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "OTTAWA",
+    "codigo": "YOW",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "PAGO PAGO",
+    "codigo": "PPG",
+    "pais": "SAMOA"
+  },
+  {
+    "ciudad": "PALERMO",
+    "codigo": "PMO",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "PANAMA",
+    "codigo": "PTY",
+    "pais": "PANAMA"
+  },
+  {
+    "ciudad": "PAPEETE",
+    "codigo": "PPT",
+    "pais": "TAHITI"
+  },
+  {
+    "ciudad": "PARAMARIBO",
+    "codigo": "PBM",
+    "pais": "SURINAM"
+  },
+  {
+    "ciudad": "PARANA",
+    "codigo": "PRA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "PARIS",
+    "codigo": "PAR",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "PARIS",
+    "codigo": "PAR",
+    "pais": "FRANCIA"
+  },
+  {
+    "ciudad": "PASO DE LOS LIBRES",
+    "codigo": "AOL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "PEKIN",
+    "codigo": "PEK",
+    "pais": "P.R.CHINA"
+  },
+  {
+    "ciudad": "PENANG",
+    "codigo": "PEN",
+    "pais": "MALASIA"
+  },
+  {
+    "ciudad": "PERITO MORENO",
+    "codigo": "PMQ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "PERTH",
+    "codigo": "PER",
+    "pais": "AUSTRALIA"
+  },
+  {
+    "ciudad": "PHOENIX",
+    "codigo": "PHX",
+    "pais": "ARIZONA, U.S.A."
+  },
+  {
+    "ciudad": "PHUKET",
+    "codigo": "HKT",
+    "pais": "TAILANDIA"
+  },
+  {
+    "ciudad": "PINAMAR",
+    "codigo": "PAJ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "PITTSBURG",
+    "codigo": "PIT",
+    "pais": "PENNSYLVANIA, U.S.A"
+  },
+  {
+    "ciudad": "PIURA",
+    "codigo": "PIU",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "POINTE A PITRE",
+    "codigo": "PTP",
+    "pais": "GUADALUPE"
+  },
+  {
+    "ciudad": "PONTA DELGADA",
+    "codigo": "PDL",
+    "pais": "IS. AZORES, PORTUGAL"
+  },
+  {
+    "ciudad": "PORLAMAR",
+    "codigo": "PMV",
+    "pais": "VENEZUELA"
+  },
+  {
+    "ciudad": "PORT AU PRINCE",
+    "codigo": "PAP",
+    "pais": "HAITI"
+  },
+  {
+    "ciudad": "PORT OF SPAIN",
+    "codigo": "POS",
+    "pais": "TRINIDAD"
+  },
+  {
+    "ciudad": "PORTLAND",
+    "codigo": "PDX",
+    "pais": "OREGON, U.S.A."
+  },
+  {
+    "ciudad": "PORTO ALEGRE",
+    "codigo": "POA",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "PORTO SANTO",
+    "codigo": "PXO",
+    "pais": "IS. MADEIRA"
+  },
+  {
+    "ciudad": "POSADAS",
+    "codigo": "PSS",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "PRAGA",
+    "codigo": "PRG",
+    "pais": "CHECOSLOVAQUIA"
+  },
+  {
+    "ciudad": "PUCALLPA",
+    "codigo": "PCL",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "PUERTO DESEADO",
+    "codigo": "PUD",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "PUERTO MADRYN",
+    "codigo": "DRY",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "PUERTO MALDONADO",
+    "codigo": "PEM",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "PUERTO MONTT",
+    "codigo": "PMC",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "PUNTA ARENAS",
+    "codigo": "PUQ",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "PUNTA CANA",
+    "codigo": "PUJ",
+    "pais": "REP. DOMINICANA"
+  },
+  {
+    "ciudad": "PUNTA DEL ESTE",
+    "codigo": "PDP",
+    "pais": "URUGUAY"
+  },
+  {
+    "ciudad": "P. DE MALLORCA",
+    "codigo": "PMI",
+    "pais": "IS. BALEARES, ESPAñA"
+  },
+  {
+    "ciudad": "QUITO",
+    "codigo": "UIO",
+    "pais": "ECUADOR"
+  },
+  {
+    "ciudad": "RALEIGH",
+    "codigo": "RDU",
+    "pais": "CAROLINA DEL N., U."
+  },
+  {
+    "ciudad": "RANGOON",
+    "codigo": "RGN",
+    "pais": "BURMA"
+  },
+  {
+    "ciudad": "RAROTONGA",
+    "codigo": "RAR",
+    "pais": "COOK, PACIFICO SUR"
+  },
+  {
+    "ciudad": "RECIFE",
+    "codigo": "REC",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "RECONQUISTA",
+    "codigo": "RCQ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "REGGIO - CALABRIA",
+    "codigo": "REG",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "RESISTENCIA",
+    "codigo": "RES",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "REYKJAVIK",
+    "codigo": "REK",
+    "pais": "ISLANDIA"
+  },
+  {
+    "ciudad": "REYKJAVIK",
+    "codigo": "REK",
+    "pais": "ISLANDIA"
+  },
+  {
+    "ciudad": "RICHMOND",
+    "codigo": "RIC",
+    "pais": "VIRGINIA, U.S.A."
+  },
+  {
+    "ciudad": "RINCON DE LOS SAUCES",
+    "codigo": "RNS",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "RIO CUARTO",
+    "codigo": "RCU",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "RIO DE JANEIRO",
+    "codigo": "RIO",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "RIO DE JANEIRO",
+    "codigo": "RIO",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "RIO DE JANEIRO",
+    "codigo": "RIO",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "RIO GALLEGOS",
+    "codigo": "RGL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "RIO GRANDE",
+    "codigo": "RGA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "RIO MAYO",
+    "codigo": "ROY",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "RIO TURBIO",
+    "codigo": "RYO",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "RIYADH",
+    "codigo": "RUH",
+    "pais": "ARABIA SAUDITA"
+  },
+  {
+    "ciudad": "ROATAN",
+    "codigo": "RTB",
+    "pais": "HONDURAS"
+  },
+  {
+    "ciudad": "ROCHESTER",
+    "codigo": "ROC",
+    "pais": "NEW YORK - USA"
+  },
+  {
+    "ciudad": "ROMA",
+    "codigo": "ROM",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "ROMA",
+    "codigo": "ROM",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "ROSARIO",
+    "codigo": "ROS",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SAINT DENIS",
+    "codigo": "RUN",
+    "pais": "IS. REUNION, FRANCIA"
+  },
+  {
+    "ciudad": "SAIPAN",
+    "codigo": "SPN",
+    "pais": "ISLAS MARIANAS"
+  },
+  {
+    "ciudad": "SALT LAKE CITY",
+    "codigo": "SLC",
+    "pais": "UTAH, U.S.A."
+  },
+  {
+    "ciudad": "SALTA",
+    "codigo": "SLA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SALVADOR",
+    "codigo": "SSA",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "SALZBURGO",
+    "codigo": "SZG",
+    "pais": "AUSTRIA"
+  },
+  {
+    "ciudad": "SAN ANTONIO OESTE",
+    "codigo": "OES",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SAN DIEGO",
+    "codigo": "SAN",
+    "pais": "CALIFORNIA, U.S.A."
+  },
+  {
+    "ciudad": "SAN FRANCISCO",
+    "codigo": "SFO",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "SAN JOSE",
+    "codigo": "SJC",
+    "pais": "CALIFORNIA - USA"
+  },
+  {
+    "ciudad": "SAN JOSE",
+    "codigo": "SJO",
+    "pais": "COSTA RICA"
+  },
+  {
+    "ciudad": "SAN JUAN",
+    "codigo": "SJU",
+    "pais": "PUERTO RICO"
+  },
+  {
+    "ciudad": "SAN JUAN",
+    "codigo": "UAQ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SAN JULIAN",
+    "codigo": "ULA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SAN LUIS",
+    "codigo": "LUQ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SAN PEDRO SULA",
+    "codigo": "SAP",
+    "pais": "HONDURAS"
+  },
+  {
+    "ciudad": "SAN RAFAEL",
+    "codigo": "AFA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SAN SALVADOR",
+    "codigo": "SAL",
+    "pais": "EL SALVADOR"
+  },
+  {
+    "ciudad": "SANAA",
+    "codigo": "SAH",
+    "pais": "REP. ARABE DEL YEMEN"
+  },
+  {
+    "ciudad": "SANTA CRUZ",
+    "codigo": "RZA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SANTA CRUZ",
+    "codigo": "SRZ",
+    "pais": "BOLIVIA"
+  },
+  {
+    "ciudad": "SANTA FE",
+    "codigo": "SFN",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SANTA MARTA",
+    "codigo": "SMR",
+    "pais": "COLOMBIA"
+  },
+  {
+    "ciudad": "SANTA ROSA",
+    "codigo": "RSA",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SANTA TERESITA",
+    "codigo": "SST",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SANTIAGO DE CHILE",
+    "codigo": "SCL",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "SANTIAGO DE COMPOSTELA",
+    "codigo": "SCQ",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "SANTIAGO DEL ESTERO",
+    "codigo": "SDE",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SANTO DOMINGO",
+    "codigo": "SDQ",
+    "pais": "REP. DOMINICANA"
+  },
+  {
+    "ciudad": "SAO LUIZ",
+    "codigo": "SLZ",
+    "pais": "MA, BRASIL"
+  },
+  {
+    "ciudad": "SAO PAULO",
+    "codigo": "SAO",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "SAO PAULO",
+    "codigo": "SAO",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "SAO PAULO",
+    "codigo": "SAO",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "SEATTLE",
+    "codigo": "SEA",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "SEUL",
+    "codigo": "SEL",
+    "pais": "COREA DEL SUR"
+  },
+  {
+    "ciudad": "SEVILLA",
+    "codigo": "SVQ",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "SHANGHAI",
+    "codigo": "SHA",
+    "pais": "CHINA"
+  },
+  {
+    "ciudad": "SHANNON",
+    "codigo": "SNN",
+    "pais": "IRLANDA"
+  },
+  {
+    "ciudad": "SHARJAH",
+    "codigo": "SHJ",
+    "pais": "EMIR. ARABES"
+  },
+  {
+    "ciudad": "SIERRA GRANDE",
+    "codigo": "SGV",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "SINGAPUR",
+    "codigo": "SIN",
+    "pais": "SINGAPUR"
+  },
+  {
+    "ciudad": "SOFIA",
+    "codigo": "SOF",
+    "pais": "BULGARIA"
+  },
+  {
+    "ciudad": "ST LUCIA",
+    "codigo": "SLU",
+    "pais": "SANTA LUCIA, ANTILLAS"
+  },
+  {
+    "ciudad": "STAVANGER",
+    "codigo": "SVG",
+    "pais": "NORUEGA"
+  },
+  {
+    "ciudad": "STUTTGART",
+    "codigo": "STR",
+    "pais": "ALEMANIA"
+  },
+  {
+    "ciudad": "ST. CROIX",
+    "codigo": "STX",
+    "pais": "IS. VIRGENES"
+  },
+  {
+    "ciudad": "ST. LOUIS",
+    "codigo": "STL",
+    "pais": "MISSOURI, U.S.A."
+  },
+  {
+    "ciudad": "ST. MAARTEN",
+    "codigo": "SXM",
+    "pais": "ANTILLAS HOLANDESAS"
+  },
+  {
+    "ciudad": "ST. THOMAS",
+    "codigo": "STT",
+    "pais": "IS. VIRGENES"
+  },
+  {
+    "ciudad": "SYDNEY",
+    "codigo": "SYD",
+    "pais": "AUSTRALIA"
+  },
+  {
+    "ciudad": "TABATINGA",
+    "codigo": "TBT",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "TACNA",
+    "codigo": "TCQ",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "TAIPEI",
+    "codigo": "TPE",
+    "pais": "TAIWAN"
+  },
+  {
+    "ciudad": "TAMPA",
+    "codigo": "TPA",
+    "pais": "FLORIDA, U.S.A."
+  },
+  {
+    "ciudad": "TANDIL",
+    "codigo": "NDL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "TANDIL",
+    "codigo": "TDL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "TANGER",
+    "codigo": "TNG",
+    "pais": "MARRUECOS"
+  },
+  {
+    "ciudad": "TARIJA",
+    "codigo": "TJA",
+    "pais": "BOLIVIA"
+  },
+  {
+    "ciudad": "TEFE",
+    "codigo": "TFF",
+    "pais": "BRASIL"
+  },
+  {
+    "ciudad": "TEGUCIGALPA",
+    "codigo": "TGU",
+    "pais": "HONDURAS"
+  },
+  {
+    "ciudad": "TEHERAN",
+    "codigo": "THR",
+    "pais": "IRAN"
+  },
+  {
+    "ciudad": "TEL AVIV",
+    "codigo": "TLV",
+    "pais": "ISRAEL"
+  },
+  {
+    "ciudad": "TEMUCO",
+    "codigo": "ZCO",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "TENERIFE",
+    "codigo": "TCI",
+    "pais": "ISLAS CANARIAS"
+  },
+  {
+    "ciudad": "TERCEIRA",
+    "codigo": "TER",
+    "pais": "IS. AZORES"
+  },
+  {
+    "ciudad": "TESALONICA",
+    "codigo": "SKG",
+    "pais": "GRECIA"
+  },
+  {
+    "ciudad": "TIMISOALA",
+    "codigo": "TSR",
+    "pais": "RUMANIA"
+  },
+  {
+    "ciudad": "TIRANA",
+    "codigo": "TIA",
+    "pais": "ALBANIA"
+  },
+  {
+    "ciudad": "TOKYO",
+    "codigo": "TYO",
+    "pais": "JAPON"
+  },
+  {
+    "ciudad": "TONGATAPU",
+    "codigo": "TBU",
+    "pais": "ISLAS TONGA"
+  },
+  {
+    "ciudad": "TORONTO",
+    "codigo": "YYZ",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "TRELEW",
+    "codigo": "REL",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "TRIPOLI",
+    "codigo": "TIP",
+    "pais": "LIBIA"
+  },
+  {
+    "ciudad": "TRUJILLO",
+    "codigo": "TRU",
+    "pais": "PERU"
+  },
+  {
+    "ciudad": "TUCSON",
+    "codigo": "TUS",
+    "pais": "ARIZONA, U.S.A."
+  },
+  {
+    "ciudad": "TUCUMAN",
+    "codigo": "TUC",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "TUNEZ",
+    "codigo": "TUN",
+    "pais": "TUNICIA"
+  },
+  {
+    "ciudad": "TURIN",
+    "codigo": "TRN",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "USHUAIA",
+    "codigo": "USH",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "VALDIVIA",
+    "codigo": "ZAL",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "VALENCIA",
+    "codigo": "VLC",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "VANCOUVER",
+    "codigo": "YVR",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "VARADERO",
+    "codigo": "VRA",
+    "pais": "CUBA"
+  },
+  {
+    "ciudad": "VARSOVIA",
+    "codigo": "WAW",
+    "pais": "POLONIA"
+  },
+  {
+    "ciudad": "VENECIA",
+    "codigo": "VCE",
+    "pais": "ITALIA"
+  },
+  {
+    "ciudad": "VICTORIA",
+    "codigo": "YYJ",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "VICTORIA FALLS",
+    "codigo": "VFA",
+    "pais": "ZIMBAWE"
+  },
+  {
+    "ciudad": "VIEDMA",
+    "codigo": "VDM",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "VIENA",
+    "codigo": "VIE",
+    "pais": "AUSTRIA"
+  },
+  {
+    "ciudad": "VIGO",
+    "codigo": "VGO",
+    "pais": "ESPAÑA"
+  },
+  {
+    "ciudad": "VILLA GESELL",
+    "codigo": "VLG",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "VILLA MERCEDES",
+    "codigo": "VME",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "VILNA",
+    "codigo": "VNO",
+    "pais": "LITUANIA"
+  },
+  {
+    "ciudad": "VIÑA DEL MAR",
+    "codigo": "KNA",
+    "pais": "CHILE"
+  },
+  {
+    "ciudad": "WASHINGTON D. C.",
+    "codigo": "WAS",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "WASHINGTON D. C.",
+    "codigo": "WAS",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "WASHINGTON D. C.",
+    "codigo": "WAS",
+    "pais": "ESTADOS UNIDOS"
+  },
+  {
+    "ciudad": "WELLINGTON",
+    "codigo": "WLG",
+    "pais": "NUEVA ZELANDA"
+  },
+  {
+    "ciudad": "WINDHOEK",
+    "codigo": "WDH",
+    "pais": "NAMIBIA"
+  },
+  {
+    "ciudad": "WINDSOR",
+    "codigo": "YOG",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "WINNIPEG",
+    "codigo": "YWG",
+    "pais": "CANADA"
+  },
+  {
+    "ciudad": "XIAMEN",
+    "codigo": "XMN",
+    "pais": "REPUBLICA POP. CHINA"
+  },
+  {
+    "ciudad": "ZAGREB",
+    "codigo": "ZAG",
+    "pais": "CROACIA"
+  },
+  {
+    "ciudad": "ZAPALA",
+    "codigo": "APZ",
+    "pais": "ARGENTINA"
+  },
+  {
+    "ciudad": "ZURICH",
+    "codigo": "ZRH",
+    "pais": "SUIZA"
+  }
+]

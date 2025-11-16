@@ -1,0 +1,41 @@
+---
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Crear viaje</title>
+  </head>
+  <body style="font-family: system-ui; max-width: 800px; margin: 2rem auto;">
+    <h1>Crear un nuevo viaje</h1>
+
+    <form
+      method="POST"
+      action="/api/trips"
+      style="display: grid; gap: 1rem; max-width: 400px;"
+    >
+      <label>
+        Nombre del viaje<br />
+        <input name="name" required style="width: 100%; padding: 0.4rem;" />
+      </label>
+
+      <label>
+        Ciudad de salida<br />
+        <input name="originCity" required style="width: 100%; padding: 0.4rem;" />
+      </label>
+
+      <label>
+        Moneda<br />
+        <input name="currency" value="EUR" required style="width: 100%; padding: 0.4rem;" />
+      </label>
+
+      <button type="submit" style="padding: 0.6rem 1rem;">
+        Guardar viaje
+      </button>
+    </form>
+
+    <p style="margin-top: 1rem;">
+      <a href="/trips">⬅ Volver a la lista de viajes</a>
+    </p>
+  </body>
+</html>

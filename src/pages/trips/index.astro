@@ -1,0 +1,65 @@
+---
+import { pool } from '../../lib/db';
+
+type Trip = {
+  id: number;
+  name: string;
+  origin_city: string;
+  currency: string;
+  created_at: string;
+};
+
+const result = await pool.query<Trip>('SELECT * FROM trips ORDER BY created_at DESC');
+const trips = result.rows;
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Viajes con amigos</title>
+  </head>
+  <body style="font-family: system-ui; max-width: 800px; margin: 2rem auto;">
+    <h1>Viajes creados</h1>
+
+    <p>
+      <a href="/trips/new">➕ Crear nuevo viaje</a>
+    </p>
+
+    {trips.length === 0 ? (
+      <p>Aún no hay viajes. ¡Crea el primero!</p>
+    ) : (
+      <ul>
+        {trips.map((t) => (
+          <li key={t.id} style="margin-bottom:0.5rem;">
+            <strong>{t.name}</strong>
+            {' '}– origen: {t.origin_city}
+            {t.origin_airport_code && <> ({t.origin_airport_code})</>}
+
+            {/* Botón entrar */}
+            <a
+              href={`/trips/${t.id}`}
+              style="margin-left:0.5rem; padding:0.2rem 0.6rem; border:1px solid #ccc; border-radius:4px; text-decoration:none;"
+            >
+              Entrar
+            </a>
+
+            {/* Botón eliminar viaje */}
+            <form
+              method="POST"
+              action="/api/trips/delete"
+              style="display:inline; margin-left:0.5rem;"
+            >
+              <input type="hidden" name="tripId" value={t.id} />
+              <button
+                type="submit"
+                style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
+              >
+                eliminar
+              </button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    )}
+  </body>
+</html>
