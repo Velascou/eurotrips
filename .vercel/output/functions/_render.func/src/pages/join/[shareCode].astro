@@ -1,0 +1,158 @@
+---
+export const prerender = false;
+
+import { pool } from '../../lib/db';
+
+const shareCode = Astro.params.shareCode!;
+const url = Astro.url;
+const participantIdParam = url.searchParams.get('participantId');
+const participantId = participantIdParam ? Number(participantIdParam) : null;
+
+// 1) Cargar viaje por share_code
+const tripRes = await pool.query(
+  'SELECT id, name, origin_city, origin_airport_code, currency, share_code FROM trips WHERE share_code = $1',
+  [shareCode]
+);
+const trip = tripRes.rows[0];
+
+if (!trip) {
+  throw new Error('Viaje no encontrado');
+}
+
+// 2) Destinos y findes
+const destRes = await pool.query(
+  'SELECT id, name, country, airport_code FROM destinations WHERE trip_id = $1 ORDER BY name',
+  [trip.id]
+);
+const destinations = destRes.rows;
+
+const weekendsRes = await pool.query(
+  'SELECT id, start_date, end_date FROM weekends WHERE trip_id = $1 ORDER BY start_date',
+  [trip.id]
+);
+const weekends = weekendsRes.rows;
+
+// 3) Si hay participantId, cargar participante y su voto
+let participant: any = null;
+let existingVote: any = null;
+
+if (participantId) {
+  const pRes = await pool.query(
+    'SELECT id, display_name, email FROM participants WHERE id = $1 AND trip_id = $2',
+    [participantId, trip.id]
+  );
+  participant = pRes.rows[0] ?? null;
+
+  if (participant) {
+    const vRes = await pool.query(
+      'SELECT destination_id, weekend_id FROM votes WHERE trip_id = $1 AND participant_id = $2',
+      [trip.id, participantId]
+    );
+    existingVote = vRes.rows[0] ?? null;
+  }
+}
+
+function formatDate(d: Date) {
+  return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Votar viaje: {trip.name}</title>
+  </head>
+  <body style="font-family: system-ui; max-width: 900px; margin: 2rem auto; line-height:1.5;">
+    <h1>{trip.name}</h1>
+    <p>
+      Origen: <strong>{trip.origin_city}</strong>
+      {trip.origin_airport_code && <> ({trip.origin_airport_code})</>}
+      <br />
+      Moneda: <strong>{trip.currency}</strong>
+    </p>
+
+    {(!participantId || !participant) ? (
+      <>
+        <h2>Preséntate para votar</h2>
+        <p>Escribe tu nombre para participar en las votaciones de este viaje.</p>
+        <form method="POST" action="/api/participants" style="display:grid; gap:0.5rem; max-width:400px;">
+          <input type="hidden" name="tripId" value={trip.id} />
+          <input type="hidden" name="shareCode" value={trip.share_code} />
+          <label>
+            Nombre (se verá en el resumen de votos)<br />
+            <input name="displayName" required style="width:100%; padding:0.3rem;" />
+          </label>
+          <label>
+            Email (opcional)<br />
+            <input name="email" type="email" style="width:100%; padding:0.3rem;" />
+          </label>
+          <button type="submit" style="padding:0.4rem 0.8rem; margin-top:0.5rem;">
+            Entrar y votar
+          </button>
+        </form>
+      </>
+    ) : (
+      <>
+        <h2>Hola, {participant.display_name} 👋</h2>
+
+        {destinations.length === 0 || weekends.length === 0 ? (
+          <p>
+            El organizador aún no ha definido destinos o fines de semana.
+          </p>
+        ) : (
+          <form method="POST" action="/api/votes" style="display:grid; gap:1rem; max-width:600px;">
+            <input type="hidden" name="tripId" value={trip.id} />
+            <input type="hidden" name="participantId" value={participant.id} />
+            <input type="hidden" name="shareCode" value={trip.share_code} />
+
+            <section>
+              <h3>Elige un destino</h3>
+              {destinations.map((d) => (
+                <label style="display:block; margin-bottom:0.3rem;">
+                  <input
+                    type="radio"
+                    name="destinationId"
+                    value={d.id}
+                    required
+                    checked={existingVote && existingVote.destination_id === d.id}
+                  />
+                  {' '}
+                  {d.name}
+                  {d.country && <> – {d.country}</>}
+                  {d.airport_code && <> ({d.airport_code})</>}
+                </label>
+              ))}
+            </section>
+
+            <section>
+              <h3>Elige un fin de semana</h3>
+              {weekends.map((w) => (
+                <label style="display:block; margin-bottom:0.3rem;">
+                  <input
+                    type="radio"
+                    name="weekendId"
+                    value={w.id}
+                    required
+                    checked={existingVote && existingVote.weekend_id === w.id}
+                  />
+                  {' '}
+                  {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                </label>
+              ))}
+            </section>
+
+            <button type="submit" style="padding:0.4rem 0.8rem; margin-top:0.5rem;">
+              Guardar voto
+            </button>
+
+            {existingVote && (
+              <p style="font-size:0.9rem; color:#555;">
+                Si cambias la selección y vuelves a guardar, se actualizará tu voto.
+              </p>
+            )}
+          </form>
+        )}
+      </>
+    )}
+  </body>
+</html>

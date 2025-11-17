@@ -2,6 +2,7 @@
 import type { APIRoute } from 'astro';
 import { pool } from '../../lib/db';
 import { guessAirportCodeFromCity } from '../../lib/airports';
+import { randomUUID } from 'node:crypto';
 
 export const prerender = false;
 
@@ -15,14 +16,12 @@ export const POST: APIRoute = async ({ request }) => {
 
   try {
     if (contentType.includes('application/json')) {
-      // Body en JSON (por si algún día llamas a /api/trips con fetch)
       const body = await request.json();
       name = String(body.name ?? '').trim();
       originCity = String(body.originCity ?? '').trim();
       originAirportCode = String(body.originAirportCode ?? '').trim().toUpperCase();
       currency = String(body.currency ?? 'EUR').trim();
     } else {
-      // Formularios clásicos (application/x-www-form-urlencoded)
       const bodyText = await request.text();
       const params = new URLSearchParams(bodyText);
 
@@ -40,7 +39,6 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response('Nombre y ciudad son obligatorios', { status: 400 });
   }
 
-  // Si no te han pasado código de aeropuerto, lo intentamos deducir del JSON
   if (!originAirportCode) {
     const guessed = guessAirportCodeFromCity(originCity);
     if (guessed) {
@@ -48,13 +46,16 @@ export const POST: APIRoute = async ({ request }) => {
     }
   }
 
+  // Código corto para compartir el viaje con amigos
+  const shareCode = randomUUID().slice(0, 8);
+
   try {
     await pool.query(
       `
-      INSERT INTO trips (name, origin_city, origin_airport_code, currency)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO trips (name, origin_city, origin_airport_code, currency, share_code)
+      VALUES ($1, $2, $3, $4, $5)
       `,
-      [name, originCity, originAirportCode || null, currency]
+      [name, originCity, originAirportCode || null, currency, shareCode]
     );
   } catch (err) {
     console.error('Error insertando en la BD:', err);
