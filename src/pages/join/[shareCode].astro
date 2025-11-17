@@ -300,25 +300,27 @@ function returnDatesForWeekend(w: any) {
         background: #020617;
         font-size: 0.8rem;
         text-align: center;
-      }
-      .pill input {
+        }
+        .pill input {
         display: none;
-      }
-      .pill span {
+        }
+        .pill span {
         pointer-events: none;
-      }
-      .pill--active-yes {
+        }
+
+        /* Colores dinámicos según el radio esté checked */
+        .pill--yes:has(input:checked) {
         border-color: #22c55e;
         background: rgba(34, 197, 94, 0.14);
-      }
-      .pill--active-maybe {
+        }
+        .pill--maybe:has(input:checked) {
         border-color: #eab308;
         background: rgba(234, 179, 8, 0.14);
-      }
-      .pill--active-no {
+        }
+        .pill--no:has(input:checked) {
         border-color: #f97373;
         background: rgba(248, 113, 113, 0.14);
-      }
+        }
 
       .small-label {
         font-size: 0.78rem;
@@ -451,33 +453,33 @@ function returnDatesForWeekend(w: any) {
 
                     {/* Disponibilidad */}
                     <div class="pill-group">
-                      <label class={`pill ${currentAvail === 'yes' ? 'pill--active-yes' : ''}`}>
+                    <label class="pill pill--yes">
                         <input
-                          type="radio"
-                          name="availability"
-                          value="yes"
-                          checked={currentAvail === 'yes'}
+                        type="radio"
+                        name="availability"
+                        value="yes"
+                        checked={currentAvail === 'yes'}
                         />
                         <span>✅ Puedo</span>
-                      </label>
-                      <label class={`pill ${currentAvail === 'maybe' ? 'pill--active-maybe' : ''}`}>
+                    </label>
+                    <label class="pill pill--maybe">
                         <input
-                          type="radio"
-                          name="availability"
-                          value="maybe"
-                          checked={currentAvail === 'maybe'}
+                        type="radio"
+                        name="availability"
+                        value="maybe"
+                        checked={currentAvail === 'maybe'}
                         />
                         <span>🤔 Quizás</span>
-                      </label>
-                      <label class={`pill ${currentAvail === 'no' ? 'pill--active-no' : ''}`}>
+                    </label>
+                    <label class="pill pill--no">
                         <input
-                          type="radio"
-                          name="availability"
-                          value="no"
-                          checked={currentAvail === 'no'}
+                        type="radio"
+                        name="availability"
+                        value="no"
+                        checked={currentAvail === 'no'}
                         />
                         <span>❌ No</span>
-                      </label>
+                    </label>
                     </div>
 
                     {/* Selects de ida / vuelta */}
