@@ -8,13 +8,13 @@ const url = Astro.url;
 const participantIdParam = url.searchParams.get('participantId');
 const participantId = participantIdParam ? Number(participantIdParam) : null;
 
-// 1) Cargar viaje por share_code
+// 1) Viaje por share_code
 const tripRes = await pool.query(
-  'SELECT id, name, origin_city, origin_airport_code, currency, share_code FROM trips WHERE share_code = $1',
+  `SELECT id, name, origin_city, origin_airport_code, currency, share_code
+   FROM trips WHERE share_code = $1`,
   [shareCode]
 );
 const trip = tripRes.rows[0];
-
 if (!trip) {
   throw new Error('Viaje no encontrado');
 }
@@ -32,9 +32,10 @@ const weekendsRes = await pool.query(
 );
 const weekends = weekendsRes.rows;
 
-// 3) Si hay participantId, cargar participante y su voto
+// 3) Participante + votos existentes
 let participant: any = null;
-let existingVote: any = null;
+let weekendVotes: any[] = [];
+let destinationRanks: any[] = [];
 
 if (participantId) {
   const pRes = await pool.query(
@@ -44,16 +45,87 @@ if (participantId) {
   participant = pRes.rows[0] ?? null;
 
   if (participant) {
-    const vRes = await pool.query(
-      'SELECT destination_id, weekend_id FROM votes WHERE trip_id = $1 AND participant_id = $2',
+    const wvRes = await pool.query(
+      `SELECT weekend_id, availability, outbound_date, return_date
+       FROM weekend_votes
+       WHERE trip_id = $1 AND participant_id = $2`,
       [trip.id, participantId]
     );
-    existingVote = vRes.rows[0] ?? null;
+    weekendVotes = wvRes.rows;
+
+    const drRes = await pool.query(
+      `SELECT destination_id, priority
+       FROM destination_rankings
+       WHERE trip_id = $1 AND participant_id = $2`,
+      [trip.id, participantId]
+    );
+    destinationRanks = drRes.rows;
   }
+}
+
+// 4) Vuelos: mismos datos que en la vista de admin, pero para mostrar mínimos
+const flightsRes = await pool.query(
+  `SELECT
+     id,
+     destination_id,
+     weekend_id,
+     direction,
+     flight_date,
+     option_rank,
+     price_per_person,
+     currency
+   FROM flight_day_options
+   WHERE trip_id = $1
+   ORDER BY destination_id, weekend_id, direction, flight_date, option_rank`,
+  [trip.id]
+);
+const flights = flightsRes.rows;
+
+// Agrupar vuelos por destino+finde+direction+fecha
+type FlightRow = (typeof flights)[number];
+const groupedFlights = new Map<string, FlightRow[]>();
+
+for (const f of flights) {
+  const key = `${f.destination_id}|${f.weekend_id}|${f.direction}|${f.flight_date.toISOString().slice(0,10)}`;
+  if (!groupedFlights.has(key)) groupedFlights.set(key, []);
+  groupedFlights.get(key)!.push(f);
+}
+
+function getFlightsFor(destId: number, weekendId: number, direction: string, dateStr: string): FlightRow[] {
+  const key = `${destId}|${weekendId}|${direction}|${dateStr}`;
+  return groupedFlights.get(key) ?? [];
 }
 
 function formatDate(d: Date) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+
+// Helper para encontrar voto de un finde
+function findWeekendVote(weekendId: number) {
+  return weekendVotes.find((w) => w.weekend_id === weekendId) ?? null;
+}
+
+// Helper para ranking de destino
+function findDestinationRank(destId: number) {
+  return destinationRanks.find((r) => r.destination_id === destId)?.priority ?? '';
+}
+
+// Días de ida/vuelta (mismo criterio que admin)
+function outboundDatesForWeekend(w: any) {
+  return [
+    new Date(w.start_date.getTime() - 2 * 24*60*60*1000),
+    new Date(w.start_date.getTime() - 1 * 24*60*60*1000),
+    w.start_date,
+    new Date(w.start_date.getTime() + 1 * 24*60*60*1000),
+  ];
+}
+function returnDatesForWeekend(w: any) {
+  return [
+    w.end_date,
+    new Date(w.end_date.getTime() + 1 * 24*60*60*1000),
+    new Date(w.end_date.getTime() + 2 * 24*60*60*1000),
+    new Date(w.end_date.getTime() + 3 * 24*60*60*1000),
+  ];
 }
 ---
 
@@ -61,98 +133,467 @@ function formatDate(d: Date) {
   <head>
     <meta charset="utf-8" />
     <title>Votar viaje: {trip.name}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --bg: #020617;
+        --bg-soft: #020617;
+        --card: #020617;
+        --card-border: #1e293b;
+        --accent: #f97316;
+        --accent-soft: rgba(249, 115, 22, 0.12);
+        --accent-text: #fed7aa;
+        --fg: #e5e7eb;
+        --muted: #9ca3af;
+        --danger: #f87171;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, #0f172a, #020617 55%);
+        color: var(--fg);
+      }
+
+      .shell {
+        min-height: 100vh;
+        padding: 1.5rem 1rem 3rem;
+        max-width: 960px;
+        margin: 0 auto;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+
+      header h1 {
+        font-size: 1.7rem;
+        margin: 0;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-text);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+      }
+
+      .layout-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr);
+        gap: 1.25rem;
+      }
+
+      @media (min-width: 900px) {
+        .layout-grid {
+          grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        }
+      }
+
+      .card {
+        border-radius: 1rem;
+        border: 1px solid var(--card-border);
+        background: radial-gradient(circle at top left, rgba(148, 163, 184, .18), transparent 55%);
+        background-color: var(--card);
+        padding: 1rem 1rem 1.2rem;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.65);
+      }
+
+      .card h2, .card h3 {
+        margin: 0 0 0.75rem;
+        font-size: 1.05rem;
+      }
+
+      .field {
+        display: grid;
+        gap: 0.3rem;
+        font-size: 0.9rem;
+        margin-bottom: 0.6rem;
+      }
+
+      input[type="text"],
+      input[type="email"],
+      select {
+        width: 100%;
+        border-radius: 0.7rem;
+        border: 1px solid #1f2937;
+        background: #020617;
+        color: var(--fg);
+        padding: 0.5rem 0.7rem;
+        font: inherit;
+      }
+
+      button {
+        border-radius: 999px;
+        border: none;
+        padding: 0.6rem 1rem;
+        font: inherit;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #f97316, #fb923c);
+        color: #0b1120;
+      }
+
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid #1f2937;
+        color: var(--fg);
+      }
+
+      .weekend-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-bottom: 0.4rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .weekend-card {
+        margin-bottom: 0.8rem;
+        padding: 0.75rem 0.7rem;
+        border-radius: 0.9rem;
+        border: 1px solid #1f2937;
+        background: rgba(15, 23, 42, 0.7);
+      }
+
+      .weekend-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+
+      .pill-group {
+        display: flex;
+        gap: 0.3rem;
+        margin: 0.25rem 0 0.45rem;
+      }
+
+      .pill {
+        flex: 1;
+        padding: 0.35rem 0.3rem;
+        border-radius: 999px;
+        border: 1px solid #1f2937;
+        background: #020617;
+        font-size: 0.8rem;
+        text-align: center;
+      }
+      .pill input {
+        display: none;
+      }
+      .pill span {
+        pointer-events: none;
+      }
+      .pill--active-yes {
+        border-color: #22c55e;
+        background: rgba(34, 197, 94, 0.14);
+      }
+      .pill--active-maybe {
+        border-color: #eab308;
+        background: rgba(234, 179, 8, 0.14);
+      }
+      .pill--active-no {
+        border-color: #f97373;
+        background: rgba(248, 113, 113, 0.14);
+      }
+
+      .small-label {
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-bottom: 0.2rem;
+      }
+
+      .flights-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+        margin-top: 0.35rem;
+      }
+
+      .flights-col {
+        font-size: 0.78rem;
+      }
+
+      .flight-line {
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .flight-price {
+        color: var(--accent-text);
+      }
+
+      .dest-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.7rem;
+        margin-bottom: 0.45rem;
+        font-size: 0.9rem;
+      }
+
+      .dest-name {
+        font-weight: 500;
+      }
+
+      .helper-text {
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-top: 0.25rem;
+      }
+    </style>
   </head>
-  <body style="font-family: system-ui; max-width: 900px; margin: 2rem auto; line-height:1.5;">
-    <h1>{trip.name}</h1>
-    <p>
-      Origen: <strong>{trip.origin_city}</strong>
-      {trip.origin_airport_code && <> ({trip.origin_airport_code})</>}
-      <br />
-      Moneda: <strong>{trip.currency}</strong>
-    </p>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="chip">Viaje compartido</div>
+        <h1>{trip.name}</h1>
+        <p>
+          Origen: <strong>{trip.origin_city}</strong>
+          {trip.origin_airport_code && <> ({trip.origin_airport_code})</>}
+          <br />
+          Moneda: <strong>{trip.currency}</strong>
+        </p>
+      </header>
 
-    {(!participantId || !participant) ? (
-      <>
-        <h2>Preséntate para votar</h2>
-        <p>Escribe tu nombre para participar en las votaciones de este viaje.</p>
-        <form method="POST" action="/api/participants" style="display:grid; gap:0.5rem; max-width:400px;">
-          <input type="hidden" name="tripId" value={trip.id} />
-          <input type="hidden" name="shareCode" value={trip.share_code} />
-          <label>
-            Nombre (se verá en el resumen de votos)<br />
-            <input name="displayName" required style="width:100%; padding:0.3rem;" />
-          </label>
-          <label>
-            Email (opcional)<br />
-            <input name="email" type="email" style="width:100%; padding:0.3rem;" />
-          </label>
-          <button type="submit" style="padding:0.4rem 0.8rem; margin-top:0.5rem;">
-            Entrar y votar
-          </button>
-        </form>
-      </>
-    ) : (
-      <>
-        <h2>Hola, {participant.display_name} 👋</h2>
+      {!participant ? (
+        <!-- FORM DE PRESENTACIÓN -->
+        <main class="layout-grid">
+          <section class="card">
+            <h2>Preséntate para votar</h2>
+            <p class="helper-text">
+              Pon tu nombre (y si quieres tu email) para poder guardar tus preferencias de fechas y destinos.
+            </p>
+            <form method="POST" action="/api/participants" style="display:grid; gap:0.7rem; margin-top:0.7rem;">
+              <input type="hidden" name="tripId" value={trip.id} />
+              <input type="hidden" name="shareCode" value={trip.share_code} />
+              <div class="field">
+                <label>Nombre</label>
+                <input name="displayName" required />
+              </div>
+              <div class="field">
+                <label>Email (opcional)</label>
+                <input name="email" type="email" />
+              </div>
+              <button type="submit" class="btn-primary">
+                Empezar a votar
+              </button>
+            </form>
+          </section>
+        </main>
+      ) : (
+        <main class="layout-grid">
+          <!-- COLUMNA IZQUIERDA: Fines de semana -->
+          <section class="card">
+            <h2>Disponibilidad por finde</h2>
+            <p class="helper-text">
+              Para cada fin de semana indica si puedes, quizá o no puedes. Si marcas que puedes o quizá, también puedes
+              elegir el día de ida y vuelta que te viene mejor.
+            </p>
 
-        {destinations.length === 0 || weekends.length === 0 ? (
-          <p>
-            El organizador aún no ha definido destinos o fines de semana.
-          </p>
-        ) : (
-          <form method="POST" action="/api/votes" style="display:grid; gap:1rem; max-width:600px;">
-            <input type="hidden" name="tripId" value={trip.id} />
-            <input type="hidden" name="participantId" value={participant.id} />
-            <input type="hidden" name="shareCode" value={trip.share_code} />
+            {weekends.length === 0 ? (
+              <p>No hay fines de semana definidos aún.</p>
+            ) : (
+              weekends.map((w) => {
+                const vote = findWeekendVote(w.id);
+                const currentAvail = vote?.availability ?? 'maybe';
 
-            <section>
-              <h3>Elige un destino</h3>
-              {destinations.map((d) => (
-                <label style="display:block; margin-bottom:0.3rem;">
-                  <input
-                    type="radio"
-                    name="destinationId"
-                    value={d.id}
-                    required
-                    checked={existingVote && existingVote.destination_id === d.id}
-                  />
-                  {' '}
-                  {d.name}
-                  {d.country && <> – {d.country}</>}
-                  {d.airport_code && <> ({d.airport_code})</>}
-                </label>
-              ))}
-            </section>
+                const outDates = outboundDatesForWeekend(w);
+                const retDates = returnDatesForWeekend(w);
 
-            <section>
-              <h3>Elige un fin de semana</h3>
-              {weekends.map((w) => (
-                <label style="display:block; margin-bottom:0.3rem;">
-                  <input
-                    type="radio"
-                    name="weekendId"
-                    value={w.id}
-                    required
-                    checked={existingVote && existingVote.weekend_id === w.id}
-                  />
-                  {' '}
-                  {formatDate(w.start_date)} – {formatDate(w.end_date)}
-                </label>
-              ))}
-            </section>
+                return (
+                  <form
+                    method="POST"
+                    action="/api/weekend-votes"
+                    class="weekend-card"
+                  >
+                    <input type="hidden" name="tripId" value={trip.id} />
+                    <input type="hidden" name="participantId" value={participant.id} />
+                    <input type="hidden" name="weekendId" value={w.id} />
+                    <input type="hidden" name="shareCode" value={trip.share_code} />
 
-            <button type="submit" style="padding:0.4rem 0.8rem; margin-top:0.5rem;">
-              Guardar voto
-            </button>
+                    <div class="weekend-title">
+                      {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                    </div>
 
-            {existingVote && (
-              <p style="font-size:0.9rem; color:#555;">
-                Si cambias la selección y vuelves a guardar, se actualizará tu voto.
-              </p>
+                    <div class="weekend-chip-row">
+                      <span>
+                        Ida desde {formatDate(outDates[0])} hasta {formatDate(outDates[outDates.length - 1])}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        Vuelta desde {formatDate(retDates[0])} hasta {formatDate(retDates[retDates.length - 1])}
+                      </span>
+                    </div>
+
+                    {/* Disponibilidad */}
+                    <div class="pill-group">
+                      <label class={`pill ${currentAvail === 'yes' ? 'pill--active-yes' : ''}`}>
+                        <input
+                          type="radio"
+                          name="availability"
+                          value="yes"
+                          checked={currentAvail === 'yes'}
+                        />
+                        <span>✅ Puedo</span>
+                      </label>
+                      <label class={`pill ${currentAvail === 'maybe' ? 'pill--active-maybe' : ''}`}>
+                        <input
+                          type="radio"
+                          name="availability"
+                          value="maybe"
+                          checked={currentAvail === 'maybe'}
+                        />
+                        <span>🤔 Quizás</span>
+                      </label>
+                      <label class={`pill ${currentAvail === 'no' ? 'pill--active-no' : ''}`}>
+                        <input
+                          type="radio"
+                          name="availability"
+                          value="no"
+                          checked={currentAvail === 'no'}
+                        />
+                        <span>❌ No</span>
+                      </label>
+                    </div>
+
+                    {/* Selects de ida / vuelta */}
+                    <div style="display:grid; gap:0.35rem; margin-top:0.2rem;">
+                      <div>
+                        <div class="small-label">Día de ida preferido (opcional)</div>
+                        <select name="outboundDate" value={vote?.outbound_date?.toISOString?.().slice(0,10) ?? ''}>
+                          <option value="">Sin preferencia</option>
+                          {outDates.map((dDate) => {
+                            const ds = dDate.toISOString().slice(0,10);
+                            const flightsForDay = destinations.length
+                              ? getFlightsFor(destinations[0].id, w.id, 'outbound', ds)
+                              : [];
+                            const minPrice = flightsForDay[0]?.price_per_person;
+                            const currency = flightsForDay[0]?.currency ?? trip.currency;
+
+                            return (
+                              <option value={ds}>
+                                {formatDate(dDate)}
+                                {minPrice ? ` · desde ${minPrice} ${currency}` : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                      <div>
+                        <div class="small-label">Día de vuelta preferido (opcional)</div>
+                        <select name="returnDate" value={vote?.return_date?.toISOString?.().slice(0,10) ?? ''}>
+                          <option value="">Sin preferencia</option>
+                          {retDates.map((dDate) => {
+                            const ds = dDate.toISOString().slice(0,10);
+                            const flightsForDay = destinations.length
+                              ? getFlightsFor(destinations[0].id, w.id, 'return', ds)
+                              : [];
+                            const minPrice = flightsForDay[0]?.price_per_person;
+                            const currency = flightsForDay[0]?.currency ?? trip.currency;
+
+                            return (
+                              <option value={ds}>
+                                {formatDate(dDate)}
+                                {minPrice ? ` · desde ${minPrice} ${currency}` : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    </div>
+
+                    <button type="submit" class="btn-ghost" style="margin-top:0.6rem; width:100%; font-size:0.85rem;">
+                      Guardar para este finde
+                    </button>
+                  </form>
+                );
+              })
             )}
-          </form>
-        )}
-      </>
-    )}
+          </section>
+
+          <!-- COLUMNA DERECHA: ranking de destinos -->
+          <section class="card">
+            <h2>Prioridad de destinos</h2>
+            <p class="helper-text">
+              Ordena los lugares que más te apetecen. El 1 es tu primera opción, 2 la segunda, etc.
+            </p>
+
+            {destinations.length === 0 ? (
+              <p>No hay destinos definidos aún.</p>
+            ) : (
+              <div style="margin-top:0.7rem;">
+                {destinations.map((d, idx) => (
+                  <form
+                    method="POST"
+                    action="/api/destination-rankings"
+                    class="dest-row"
+                  >
+                    <input type="hidden" name="tripId" value={trip.id} />
+                    <input type="hidden" name="participantId" value={participant.id} />
+                    <input type="hidden" name="destinationId" value={d.id} />
+                    <input type="hidden" name="shareCode" value={trip.share_code} />
+
+                    <div>
+                      <div class="dest-name">
+                        {d.name}
+                        {d.country && <> – {d.country}</>}
+                      </div>
+                      {d.airport_code && (
+                        <div class="helper-text" style="margin-top:0.1rem;">
+                          Aeropuerto: {d.airport_code}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:0.2rem; align-items:flex-end;">
+                      <select
+                        name="priority"
+                        style="width:4.5rem;"
+                        value={findDestinationRank(d.id)}
+                      >
+                        <option value="">—</option>
+                        {destinations.map((_, i) => (
+                          <option value={i + 1}>{i + 1}</option>
+                        ))}
+                      </select>
+                      <button type="submit" class="btn-ghost" style="font-size:0.75rem; padding:0.25rem 0.6rem;">
+                        Guardar
+                      </button>
+                    </div>
+                  </form>
+                ))}
+                <p class="helper-text">
+                  Puedes cambiar las prioridades tantas veces como quieras; siempre se guarda la última versión.
+                </p>
+              </div>
+            )}
+          </section>
+        </main>
+      )}
+    </div>
   </body>
 </html>
