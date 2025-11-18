@@ -5,7 +5,7 @@ import { pool } from '../../lib/db';
 
 const shareCode = Astro.params.shareCode!;
 
-// 1) Viaje por share_code
+// 1) Viaje
 const tripRes = await pool.query(
   `SELECT id, name, origin_city, origin_airport_code, currency, share_code
    FROM trips WHERE share_code = $1`,
@@ -16,9 +16,9 @@ if (!trip) {
   throw new Error('Viaje no encontrado');
 }
 
-// 2) Participantes del viaje (para que el viajero elija su “slot”)
+// 2) Participantes (para elegir “quién eres”)
 const participantsRes = await pool.query(
-  `SELECT id, display_name, email
+  `SELECT id, display_name, email, created_at
    FROM participants
    WHERE trip_id = $1
    ORDER BY created_at`,
@@ -26,7 +26,7 @@ const participantsRes = await pool.query(
 );
 const participants = participantsRes.rows;
 
-// 3) Determinar participante a partir de la cookie de sesión
+// 3) ¿Hay sesión activa?
 const sessionToken = Astro.cookies.get('eurotrip_session')?.value ?? null;
 let participant: any = null;
 
@@ -57,19 +57,20 @@ if (sessionToken) {
   }
 }
 
-// 4) Destinos, findes y vuelos
-const destRes = await pool.query(
-  'SELECT id, name, country, airport_code FROM destinations WHERE trip_id = $1 ORDER BY name',
-  [trip.id]
-);
-const destinations = destRes.rows;
-
+// 4) Datos del viaje para votar
 const weekendsRes = await pool.query(
   'SELECT id, start_date, end_date FROM weekends WHERE trip_id = $1 ORDER BY start_date',
   [trip.id]
 );
 const weekends = weekendsRes.rows;
 
+const destRes = await pool.query(
+  'SELECT id, name, country, airport_code FROM destinations WHERE trip_id = $1 ORDER BY name',
+  [trip.id]
+);
+const destinations = destRes.rows;
+
+// 5) Vuelos (para mostrar precios desde)
 const flightsRes = await pool.query(
   `SELECT
      id,
@@ -87,7 +88,7 @@ const flightsRes = await pool.query(
 );
 const flights = flightsRes.rows;
 
-// 5) Votos y sugerencias del participante (solo si hay sesión)
+// 6) Datos del participante (si hay sesión): votos, rankings, sugerencias
 let weekendVotes: any[] = [];
 let destinationRanks: any[] = [];
 let suggestions: any[] = [];
@@ -110,7 +111,7 @@ if (participant) {
   destinationRanks = drRes.rows;
 
   const sugRes = await pool.query(
-    `SELECT id, name, country, created_at
+    `SELECT id, name, country, priority, created_at
      FROM participant_destination_suggestions
      WHERE trip_id = $1 AND participant_id = $2
      ORDER BY created_at`,
@@ -119,7 +120,7 @@ if (participant) {
   suggestions = sugRes.rows;
 }
 
-// 6) Agrupar vuelos
+// 7) Agrupación de vuelos
 type FlightRow = (typeof flights)[number];
 const groupedFlights = new Map<string, FlightRow[]>();
 
@@ -138,15 +139,6 @@ function formatDate(d: Date) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
 }
 
-// Helpers votos
-function findWeekendVote(weekendId: number) {
-  return weekendVotes.find((w) => w.weekend_id === weekendId) ?? null;
-}
-function findDestinationRank(destId: number) {
-  return destinationRanks.find((r) => r.destination_id === destId)?.priority ?? '';
-}
-
-// Días de ida/vuelta
 function outboundDatesForWeekend(w: any) {
   return [
     new Date(w.start_date.getTime() - 2 * 24*60*60*1000),
@@ -162,6 +154,13 @@ function returnDatesForWeekend(w: any) {
     new Date(w.end_date.getTime() + 2 * 24*60*60*1000),
     new Date(w.end_date.getTime() + 3 * 24*60*60*1000),
   ];
+}
+
+function findWeekendVote(weekendId: number) {
+  return weekendVotes.find((w) => w.weekend_id === weekendId) ?? null;
+}
+function findDestinationRank(destId: number) {
+  return destinationRanks.find((r) => r.destination_id === destId)?.priority ?? '';
 }
 ---
 
@@ -180,6 +179,9 @@ function returnDatesForWeekend(w: any) {
         --accent-text: #fed7aa;
         --fg: #e5e7eb;
         --muted: #9ca3af;
+        --good: #22c55e;
+        --maybe: #eab308;
+        --bad: #f97373;
       }
 
       * { box-sizing: border-box; }
@@ -229,30 +231,24 @@ function returnDatesForWeekend(w: any) {
         letter-spacing: .05em;
       }
 
-      .layout-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.1fr);
-        gap: 1.25rem;
-      }
-
-      @media (min-width: 900px) {
-        .layout-grid {
-          grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-        }
-      }
-
       .card {
         border-radius: 1rem;
         border: 1px solid var(--card-border);
         background: radial-gradient(circle at top left, rgba(148, 163, 184, .18), transparent 55%);
         background-color: var(--card);
-        padding: 1rem 1rem 1.2rem;
+        padding: 1rem 1rem 1.3rem;
         box-shadow: 0 18px 40px rgba(15, 23, 42, 0.65);
       }
 
-      .card h2, .card h3 {
-        margin: 0 0 0.75rem;
+      .card h2 {
+        margin: 0 0 0.65rem;
         font-size: 1.05rem;
+      }
+
+      .helper-text {
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-top: 0.2rem;
       }
 
       .field {
@@ -263,7 +259,8 @@ function returnDatesForWeekend(w: any) {
       }
 
       select,
-      input[type="password"] {
+      input[type="password"],
+      input[type="text"] {
         width: 100%;
         border-radius: 0.7rem;
         border: 1px solid #1f2937;
@@ -276,7 +273,7 @@ function returnDatesForWeekend(w: any) {
       button {
         border-radius: 999px;
         border: none;
-        padding: 0.6rem 1rem;
+        padding: 0.7rem 1.1rem;
         font: inherit;
         cursor: pointer;
         display: inline-flex;
@@ -288,27 +285,29 @@ function returnDatesForWeekend(w: any) {
       .btn-primary {
         background: linear-gradient(135deg, #f97316, #fb923c);
         color: #0b1120;
+        width: 100%;
+        margin-top: 1rem;
       }
 
-      .btn-ghost {
-        background: transparent;
-        border: 1px solid #1f2937;
-        color: var(--fg);
+      .layout-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr);
+        gap: 1rem;
       }
-
-      .helper-text {
-        font-size: 0.78rem;
-        color: var(--muted);
-        margin-top: 0.25rem;
+      @media (min-width: 900px) {
+        .layout-grid {
+          grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        }
       }
 
       .weekend-card {
-        margin-bottom: 0.8rem;
-        padding: 0.75rem 0.7rem;
+        margin-top: 0.6rem;
+        padding: 0.7rem 0.7rem;
         border-radius: 0.9rem;
         border: 1px solid #1f2937;
         background: rgba(15, 23, 42, 0.7);
       }
+
       .weekend-title {
         font-size: 0.95rem;
         font-weight: 600;
@@ -329,6 +328,7 @@ function returnDatesForWeekend(w: any) {
         gap: 0.3rem;
         margin: 0.25rem 0 0.45rem;
       }
+
       .pill {
         flex: 1;
         padding: 0.35rem 0.3rem;
@@ -338,20 +338,25 @@ function returnDatesForWeekend(w: any) {
         font-size: 0.8rem;
         text-align: center;
       }
+
       .pill input {
         display: none;
       }
+
       .pill span {
         pointer-events: none;
       }
+
       .pill--yes:has(input:checked) {
         border-color: #22c55e;
         background: rgba(34, 197, 94, 0.14);
       }
+
       .pill--maybe:has(input:checked) {
         border-color: #eab308;
         background: rgba(234, 179, 8, 0.14);
       }
+
       .pill--no:has(input:checked) {
         border-color: #f97373;
         background: rgba(248, 113, 113, 0.14);
@@ -368,23 +373,42 @@ function returnDatesForWeekend(w: any) {
         align-items: center;
         justify-content: space-between;
         gap: 0.7rem;
-        margin-bottom: 0.45rem;
+        margin-bottom: 0.55rem;
         font-size: 0.9rem;
       }
+
       .dest-name {
         font-weight: 500;
       }
 
-      .suggestion-item {
-        font-size: 0.85rem;
-        margin-bottom: 0.3rem;
+      .suggestion-row {
+        display: grid;
+        grid-template-columns: 1.3fr 1.1fr 0.7fr;
+        gap: 0.4rem;
+        align-items: center;
+        margin-top: 0.4rem;
+      }
+
+      @media (max-width: 640px) {
+        .suggestion-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .badge-counter {
+        display:inline-flex;
+        align-items:center;
+        gap:0.35rem;
+        font-size:0.8rem;
+        color:var(--muted);
+        margin-top:0.3rem;
       }
     </style>
   </head>
   <body>
     <div class="shell">
       <header>
-        <div class="chip">Viaje compartido</div>
+        <div class="chip">Votación de viaje</div>
         <h1>{trip.name}</h1>
         <p>
           Origen: <strong>{trip.origin_city}</strong>
@@ -395,7 +419,7 @@ function returnDatesForWeekend(w: any) {
       </header>
 
       {!participant ? (
-        <!-- FORM DE REGISTRO: elegir viajero + contraseña -->
+        <!-- PANTALLA DE REGISTRO -->
         <main>
           <section class="card">
             <h2>Identifícate como viajero</h2>
@@ -404,7 +428,7 @@ function returnDatesForWeekend(w: any) {
             </p>
 
             {participants.length === 0 ? (
-              <p>El organizador aún no ha añadido viajeros para este viaje.</p>
+              <p style="margin-top:0.7rem;">El organizador aún no ha añadido viajeros para este viaje.</p>
             ) : (
               <form
                 method="POST"
@@ -440,256 +464,232 @@ function returnDatesForWeekend(w: any) {
           </section>
         </main>
       ) : (
-        <!-- VISTA DE VOTACIÓN -->
+        <!-- PANTALLA DE VOTACIÓN ÚNICA -->
         <main class="layout-grid">
-          <!-- IZQUIERDA: Fines de semana -->
+          <!-- IZQUIERDA: findes -->
           <section class="card">
             <h2>Hola, {participant.display_name}</h2>
             <p class="helper-text">
-              Marca tu disponibilidad por fin de semana y, si quieres, elige tus días preferidos de ida y vuelta.
+              Marca tu disponibilidad para cada fin de semana y, si quieres, indica tus días preferidos de ida y vuelta.
             </p>
 
-            {weekends.length === 0 ? (
-              <p>No hay fines de semana definidos aún.</p>
-            ) : (
-              weekends.map((w) => {
-                const vote = findWeekendVote(w.id);
-                const currentAvail = vote?.availability ?? 'maybe';
+            <form method="POST" action="/api/vote" style="display:grid; gap:0.9rem; margin-top:0.8rem;">
+              <input type="hidden" name="tripId" value={trip.id} />
+              <input type="hidden" name="participantId" value={participant.id} />
+              <input type="hidden" name="shareCode" value={trip.share_code} />
 
-                const outDates = outboundDatesForWeekend(w);
-                const retDates = returnDatesForWeekend(w);
+              {weekends.length === 0 ? (
+                <p>No hay fines de semana definidos aún.</p>
+              ) : (
+                weekends.map((w) => {
+                  const vote = findWeekendVote(w.id);
+                  const currentAvail = vote?.availability ?? 'maybe';
 
-                return (
-                  <form
-                    method="POST"
-                    action="/api/weekend-votes"
-                    class="weekend-card"
-                  >
-                    <input type="hidden" name="tripId" value={trip.id} />
-                    <input type="hidden" name="participantId" value={participant.id} />
-                    <input type="hidden" name="weekendId" value={w.id} />
-                    <input type="hidden" name="shareCode" value={trip.share_code} />
+                  const outDates = outboundDatesForWeekend(w);
+                  const retDates = returnDatesForWeekend(w);
 
-                    <div class="weekend-title">
-                      {formatDate(w.start_date)} – {formatDate(w.end_date)}
-                    </div>
-
-                    <div class="weekend-chip-row">
-                      <span>
-                        Ida entre {formatDate(outDates[0])} y {formatDate(outDates[outDates.length - 1])}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        Vuelta entre {formatDate(retDates[0])} y {formatDate(retDates[retDates.length - 1])}
-                      </span>
-                    </div>
-
-                    <div class="pill-group">
-                      <label class="pill pill--yes">
-                        <input
-                          type="radio"
-                          name="availability"
-                          value="yes"
-                          checked={currentAvail === 'yes'}
-                        />
-                        <span>✅ Puedo</span>
-                      </label>
-                      <label class="pill pill--maybe">
-                        <input
-                          type="radio"
-                          name="availability"
-                          value="maybe"
-                          checked={currentAvail === 'maybe'}
-                        />
-                        <span>🤔 Quizás</span>
-                      </label>
-                      <label class="pill pill--no">
-                        <input
-                          type="radio"
-                          name="availability"
-                          value="no"
-                          checked={currentAvail === 'no'}
-                        />
-                        <span>❌ No</span>
-                      </label>
-                    </div>
-
-                    <div style="display:grid; gap:0.35rem; margin-top:0.2rem;">
-                      <div>
-                        <div class="small-label">Día de ida preferido (opcional)</div>
-                        <select
-                          name="outboundDate"
-                          value={vote?.outbound_date?.toISOString?.().slice(0,10) ?? ''}
-                        >
-                          <option value="">Sin preferencia</option>
-                          {outDates.map((dDate) => {
-                            const ds = dDate.toISOString().slice(0,10);
-                            const flightsForDay = destinations.length
-                              ? getFlightsFor(destinations[0].id, w.id, 'outbound', ds)
-                              : [];
-                            const minPrice = flightsForDay[0]?.price_per_person;
-                            const currency = flightsForDay[0]?.currency ?? trip.currency;
-
-                            return (
-                              <option value={ds}>
-                                {formatDate(dDate)}
-                                {minPrice ? ` · desde ${minPrice} ${currency}` : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
+                  return (
+                    <div class="weekend-card">
+                      <div class="weekend-title">
+                        {formatDate(w.start_date)} – {formatDate(w.end_date)}
                       </div>
-                      <div>
-                        <div class="small-label">Día de vuelta preferido (opcional)</div>
-                        <select
-                          name="returnDate"
-                          value={vote?.return_date?.toISOString?.().slice(0,10) ?? ''}
-                        >
-                          <option value="">Sin preferencia</option>
-                          {retDates.map((dDate) => {
-                            const ds = dDate.toISOString().slice(0,10);
-                            const flightsForDay = destinations.length
-                              ? getFlightsFor(destinations[0].id, w.id, 'return', ds)
-                              : [];
-                            const minPrice = flightsForDay[0]?.price_per_person;
-                            const currency = flightsForDay[0]?.currency ?? trip.currency;
-
-                            return (
-                              <option value={ds}>
-                                {formatDate(dDate)}
-                                {minPrice ? ` · desde ${minPrice} ${currency}` : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
+                      <div class="weekend-chip-row">
+                        <span>
+                          Ida entre {formatDate(outDates[0])} y {formatDate(outDates[outDates.length - 1])}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          Vuelta entre {formatDate(retDates[0])} y {formatDate(retDates[retDates.length - 1])}
+                        </span>
                       </div>
-                    </div>
 
-                    <button
-                      type="submit"
-                      class="btn-ghost"
-                      style="margin-top:0.6rem; width:100%; font-size:0.85rem;"
-                    >
-                      Guardar para este finde
-                    </button>
-                  </form>
-                );
-              })
-            )}
-          </section>
-
-          <!-- DERECHA: Ranking de destinos + sugerencias -->
-          <section class="card">
-            <h2>Destinos y prioridades</h2>
-            <p class="helper-text">
-              Ordena los destinos propuestos y sugiere hasta 3 lugares nuevos que te apetezca visitar.
-            </p>
-
-            {destinations.length === 0 ? (
-              <p>No hay destinos definidos aún.</p>
-            ) : (
-              <div style="margin-top:0.7rem;">
-                {destinations.map((d, idx) => (
-                  <form
-                    method="POST"
-                    action="/api/destination-rankings"
-                    class="dest-row"
-                  >
-                    <input type="hidden" name="tripId" value={trip.id} />
-                    <input type="hidden" name="participantId" value={participant.id} />
-                    <input type="hidden" name="destinationId" value={d.id} />
-                    <input type="hidden" name="shareCode" value={trip.share_code} />
-
-                    <div>
-                      <div class="dest-name">
-                        {d.name}
-                        {d.country && <> – {d.country}</>}
+                      <div class="pill-group">
+                        <label class="pill pill--yes">
+                          <input
+                            type="radio"
+                            name={`availability_${w.id}`}
+                            value="yes"
+                            checked={currentAvail === 'yes'}
+                          />
+                          <span>✅ Puedo</span>
+                        </label>
+                        <label class="pill pill--maybe">
+                          <input
+                            type="radio"
+                            name={`availability_${w.id}`}
+                            value="maybe"
+                            checked={currentAvail === 'maybe'}
+                          />
+                          <span>🤔 Quizás</span>
+                        </label>
+                        <label class="pill pill--no">
+                          <input
+                            type="radio"
+                            name={`availability_${w.id}`}
+                            value="no"
+                            checked={currentAvail === 'no'}
+                          />
+                          <span>❌ No</span>
+                        </label>
                       </div>
-                      {d.airport_code && (
-                        <div class="helper-text" style="margin-top:0.1rem;">
-                          Aeropuerto: {d.airport_code}
+
+                      <div style="display:grid; gap:0.35rem; margin-top:0.2rem;">
+                        <div>
+                          <div class="small-label">Día de ida preferido (opcional)</div>
+                          <select
+                            name={`outboundDate_${w.id}`}
+                            value={vote?.outbound_date?.toISOString?.().slice(0,10) ?? ''}
+                          >
+                            <option value="">Sin preferencia</option>
+                            {outDates.map((dDate) => {
+                              const ds = dDate.toISOString().slice(0,10);
+                              const flightsForDay = destinations.length
+                                ? getFlightsFor(destinations[0].id, w.id, 'outbound', ds)
+                                : [];
+                              const minPrice = flightsForDay[0]?.price_per_person;
+                              const currency = flightsForDay[0]?.currency ?? trip.currency;
+
+                              return (
+                                <option value={ds}>
+                                  {formatDate(dDate)}
+                                  {minPrice ? ` · desde ${minPrice} ${currency}` : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
                         </div>
-                      )}
-                    </div>
+                        <div>
+                          <div class="small-label">Día de vuelta preferido (opcional)</div>
+                          <select
+                            name={`returnDate_${w.id}`}
+                            value={vote?.return_date?.toISOString?.().slice(0,10) ?? ''}
+                          >
+                            <option value="">Sin preferencia</option>
+                            {retDates.map((dDate) => {
+                              const ds = dDate.toISOString().slice(0,10);
+                              const flightsForDay = destinations.length
+                                ? getFlightsFor(destinations[0].id, w.id, 'return', ds)
+                                : [];
+                              const minPrice = flightsForDay[0]?.price_per_person;
+                              const currency = flightsForDay[0]?.currency ?? trip.currency;
 
-                    <div style="display:flex; flex-direction:column; gap:0.2rem; align-items:flex-end;">
-                      <select
-                        name="priority"
-                        style="width:4.5rem;"
-                        value={findDestinationRank(d.id)}
-                      >
-                        <option value="">—</option>
-                        {destinations.map((_, i) => (
-                          <option value={i + 1}>{i + 1}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="submit"
-                        class="btn-ghost"
-                        style="font-size:0.75rem; padding:0.25rem 0.6rem;"
-                      >
-                        Guardar
-                      </button>
+                              return (
+                                <option value={ds}>
+                                  {formatDate(dDate)}
+                                  {minPrice ? ` · desde ${minPrice} ${currency}` : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                  </form>
-                ))}
+                  );
+                })
+              )}
+
+              <!-- DERECHA dentro del mismo form: destinos + sugerencias -->
+              <section class="card" style="margin-top:1rem;">
+                <h2>Ciudades que te apetecen</h2>
                 <p class="helper-text">
-                  Puedes cambiar las prioridades tantas veces como quieras; siempre se guarda la última versión.
+                  Ordena los destinos propuestos y añade hasta 3 sugerencias con prioridad 1, 2 o 3.
                 </p>
-              </div>
-            )}
 
-            <hr style="border:none; border-top:1px solid #1f2937; margin:1.2rem 0;" />
-
-            <h3>Tus sugerencias (máx. 3)</h3>
-            {suggestions.length === 0 ? (
-              <p class="helper-text">Aún no has sugerido ningún destino.</p>
-            ) : (
-              <div style="margin-top:0.4rem;">
-                {suggestions.map((s) => (
-                  <div class="suggestion-item">
-                    <strong>{s.name}</strong>
-                    {s.country && <> – {s.country}</>}
+                {destinations.length === 0 ? (
+                  <p style="margin-top:0.7rem;">Todavía no hay destinos definidos por el organizador.</p>
+                ) : (
+                  <div style="margin-top:0.7rem;">
+                    {destinations.map((d, idx) => (
+                      <div class="dest-row">
+                        <div>
+                          <div class="dest-name">
+                            {d.name}
+                            {d.country && <> – {d.country}</>}
+                          </div>
+                          {d.airport_code && (
+                            <div class="helper-text" style="margin-top:0.1rem;">
+                              Aeropuerto: {d.airport_code}
+                            </div>
+                          )}
+                        </div>
+                        <div style="min-width:4.5rem;">
+                          <select
+                            name={`destPriority_${d.id}`}
+                            value={findDestinationRank(d.id)}
+                          >
+                            <option value="">—</option>
+                            {destinations.map((_, i) => (
+                              <option value={i + 1}>{i + 1}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    ))}
+                    <p class="helper-text">
+                      No tienes que rellenar todo, sólo tus favoritas y su orden aproximado.
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
+                )}
 
-            {suggestions.length < 3 ? (
-              <form
-                method="POST"
-                action="/api/destination-suggestions"
-                style="display:grid; gap:0.4rem; margin-top:0.6rem;"
-              >
-                <input type="hidden" name="tripId" value={trip.id} />
-                <input type="hidden" name="participantId" value={participant.id} />
-                <input type="hidden" name="shareCode" value={trip.share_code} />
+                <hr style="border:none; border-top:1px solid #1f2937; margin:1rem 0;" />
 
-                <div class="field">
-                  <label>Ciudad</label>
-                  <input
-                    name="name"
-                    required
-                    style="width:100%; padding:0.5rem 0.7rem; border-radius:0.7rem; border:1px solid #1f2937; background:#020617; color:var(--fg);"
-                  />
-                </div>
-                <div class="field">
-                  <label>País (opcional)</label>
-                  <input
-                    name="country"
-                    style="width:100%; padding:0.5rem 0.7rem; border-radius:0.7rem; border:1px solid #1f2937; background:#020617; color:var(--fg);"
-                  />
+                <h2>Sugiere tus destinos (máx. 3)</h2>
+
+                <div class="badge-counter">
+                  <span>Has sugerido {suggestions.length} / 3 destinos.</span>
+                  <span>Te quedan {3 - suggestions.length >= 0 ? (3 - suggestions.length) : 0} por usar.</span>
                 </div>
 
-                <button type="submit" class="btn-primary" style="margin-top:0.2rem;">
-                  Añadir sugerencia
-                </button>
-              </form>
-            ) : (
-              <p class="helper-text" style="margin-top:0.6rem;">
-                Ya has sugerido 3 destinos. Si quieres cambiar alguno, pídeselo al organizador.
-              </p>
-            )}
+                {Array.from({ length: 3 }).map((_, i) => {
+                  const slot = suggestions[i] ?? null;
+                  const slotIndex = i + 1;
+                  const priorityValue = slot?.priority ?? '';
+
+                  return (
+                    <div class="suggestion-row">
+                      <div>
+                        <div class="small-label">Ciudad #{slotIndex}</div>
+                        <input
+                          type="text"
+                          name={`sugName_${slotIndex}`}
+                          value={slot?.name ?? ''}
+                          placeholder="Ej: Budapest"
+                        />
+                      </div>
+                      <div>
+                        <div class="small-label">País (opcional)</div>
+                        <input
+                          type="text"
+                          name={`sugCountry_${slotIndex}`}
+                          value={slot?.country ?? ''}
+                          placeholder="Ej: Hungría"
+                        />
+                      </div>
+                      <div>
+                        <div class="small-label">Prioridad</div>
+                        <select
+                          name={`sugPriority_${slotIndex}`}
+                          value={priorityValue}
+                        >
+                          <option value="">Automática</option>
+                          <option value="1">1 (más ganas)</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <p class="helper-text" style="margin-top:0.5rem;">
+                  Si no asignas prioridad, se ordenarán automáticamente por orden de entrada (1, 2 y 3).
+                </p>
+              </section>
+
+              <button type="submit" class="btn-primary">
+                Guardar tu votación
+              </button>
+            </form>
           </section>
         </main>
       )}

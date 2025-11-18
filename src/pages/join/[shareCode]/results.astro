@@ -1,0 +1,616 @@
+---
+export const prerender = false;
+
+import { pool } from '../../lib/db';
+
+const shareCode = Astro.params.shareCode!;
+
+// 1) Viaje por share_code
+const tripRes = await pool.query(
+  `SELECT id, name, origin_city, origin_airport_code, currency, share_code
+   FROM trips
+   WHERE share_code = $1`,
+  [shareCode]
+);
+const trip = tripRes.rows[0];
+if (!trip) {
+  throw new Error('Viaje no encontrado');
+}
+
+// 2) Participantes (para totales y %)
+const participantsCountRes = await pool.query(
+  `SELECT COUNT(*)::int AS c
+   FROM participants
+   WHERE trip_id = $1`,
+  [trip.id]
+);
+const totalParticipants: number = participantsCountRes.rows[0].c || 0;
+
+// 3) Intentar identificar al participante desde la cookie (opcional, solo para saludo)
+const sessionToken = Astro.cookies.get('eurotrip_session')?.value ?? null;
+let participant: any = null;
+
+if (sessionToken) {
+  const sRes = await pool.query(
+    `
+    SELECT
+      s.participant_id,
+      p.display_name
+    FROM participant_sessions s
+    JOIN participants p ON p.id = s.participant_id
+    WHERE
+      s.session_token = $1
+      AND s.trip_id = $2
+      AND s.expires_at > now()
+    `,
+    [sessionToken, trip.id]
+  );
+
+  if (sRes.rowCount > 0) {
+    const row = sRes.rows[0];
+    participant = {
+      id: row.participant_id,
+      display_name: row.display_name,
+    };
+  }
+}
+
+// 4) Estadísticas de fines de semana (yes/maybe/no por finde)
+const weekendStatsRes = await pool.query(
+  `
+  SELECT
+    w.id,
+    w.start_date,
+    w.end_date,
+    COUNT(v.*) FILTER (WHERE v.availability = 'yes')   AS yes_count,
+    COUNT(v.*) FILTER (WHERE v.availability = 'maybe') AS maybe_count,
+    COUNT(v.*) FILTER (WHERE v.availability = 'no')    AS no_count,
+    COUNT(v.*)                                         AS total_votes
+  FROM weekends w
+  LEFT JOIN weekend_votes v
+    ON v.trip_id = w.trip_id
+   AND v.weekend_id = w.id
+  WHERE w.trip_id = $1
+  GROUP BY w.id
+  ORDER BY w.start_date
+  `,
+  [trip.id]
+);
+
+// casteamos a number para no liarnos en la plantilla
+const weekendStats = weekendStatsRes.rows.map((r) => ({
+  id: r.id,
+  start_date: r.start_date,
+  end_date: r.end_date,
+  yes_count: Number(r.yes_count ?? 0),
+  maybe_count: Number(r.maybe_count ?? 0),
+  no_count: Number(r.no_count ?? 0),
+  total_votes: Number(r.total_votes ?? 0),
+}));
+
+// 5) Precios mínimos de vuelos por finde (ida / vuelta)
+const flightAggRes = await pool.query(
+  `
+  SELECT
+    weekend_id,
+    direction,
+    MIN(price_per_person) AS min_price,
+    MIN(currency)         AS currency
+  FROM flight_day_options
+  WHERE trip_id = $1
+  GROUP BY weekend_id, direction
+  `,
+  [trip.id]
+);
+
+type FlightAgg = {
+  weekend_id: number;
+  direction: string;
+  min_price: string;
+  currency: string;
+};
+
+const flightAggMap = new Map<string, { price: number; currency: string }>();
+
+for (const row of flightAggRes.rows as FlightAgg[]) {
+  const key = `${row.weekend_id}|${row.direction}`;
+  if (row.min_price != null) {
+    flightAggMap.set(key, {
+      price: Number(row.min_price),
+      currency: row.currency || trip.currency,
+    });
+  }
+}
+
+function getMinPrice(weekendId: number, direction: 'outbound' | 'return') {
+  const key = `${weekendId}|${direction}`;
+  return flightAggMap.get(key) ?? null;
+}
+
+// 6) Ranking de destinos
+const destStatsRes = await pool.query(
+  `
+  SELECT
+    d.id,
+    d.name,
+    d.country,
+    COUNT(r.*)           AS votes_count,
+    AVG(r.priority)::float AS avg_priority
+  FROM destinations d
+  LEFT JOIN destination_rankings r
+    ON r.trip_id = d.trip_id
+   AND r.destination_id = d.id
+  WHERE d.trip_id = $1
+  GROUP BY d.id
+  ORDER BY
+    votes_count DESC,
+    avg_priority ASC NULLS LAST,
+    d.name ASC
+  `,
+  [trip.id]
+);
+
+const destStats = destStatsRes.rows.map((r) => ({
+  id: r.id,
+  name: r.name,
+  country: r.country,
+  votes_count: Number(r.votes_count ?? 0),
+  avg_priority: r.avg_priority !== null ? Number(r.avg_priority) : null,
+}));
+
+// 7) Sugerencias de destinos (agrupadas)
+const sugRes = await pool.query(
+  `
+  SELECT
+    name,
+    country,
+    COUNT(*)::int AS count
+  FROM participant_destination_suggestions
+  WHERE trip_id = $1
+  GROUP BY name, country
+  ORDER BY count DESC, name ASC
+  `,
+  [trip.id]
+);
+const suggestions = sugRes.rows;
+
+// Helpers
+function formatDate(d: Date) {
+  return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+function pct(count: number) {
+  if (!totalParticipants || totalParticipants === 0) return 0;
+  return Math.round((count / totalParticipants) * 100);
+}
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Resultados del viaje: {trip.name}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --bg: #020617;
+        --card: #020617;
+        --card-border: #1e293b;
+        --accent: #f97316;
+        --accent-soft: rgba(249, 115, 22, 0.12);
+        --accent-text: #fed7aa;
+        --fg: #e5e7eb;
+        --muted: #9ca3af;
+        --good: #22c55e;
+        --maybe: #eab308;
+        --bad: #f97373;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, #0f172a, #020617 55%);
+        color: var(--fg);
+      }
+
+      .shell {
+        min-height: 100vh;
+        padding: 1.5rem 1rem 3rem;
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        margin-bottom: 1.5rem;
+      }
+      header h1 {
+        font-size: 1.6rem;
+        margin: 0;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-text);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+      }
+
+      .top-actions {
+        display:flex;
+        flex-wrap:wrap;
+        gap:0.5rem;
+        margin-top:0.5rem;
+      }
+
+      a.btn-link {
+        text-decoration:none;
+      }
+
+      .btn {
+        border-radius: 999px;
+        border: none;
+        padding: 0.55rem 0.9rem;
+        font: inherit;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        font-size:0.85rem;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #f97316, #fb923c);
+        color: #0b1120;
+      }
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid #1f2937;
+        color: var(--fg);
+      }
+
+      .layout-grid {
+        display:grid;
+        grid-template-columns: minmax(0,1.1fr);
+        gap:1.25rem;
+      }
+      @media (min-width: 900px){
+        .layout-grid {
+          grid-template-columns: minmax(0,1.1fr) minmax(0,1fr);
+        }
+      }
+
+      .card {
+        border-radius: 1rem;
+        border: 1px solid var(--card-border);
+        padding: 1rem 1rem 1.2rem;
+        background: radial-gradient(circle at top left, rgba(148,163,184,0.18), transparent 55%);
+        background-color: var(--card);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.65);
+      }
+
+      .card h2 {
+        margin:0 0 0.6rem;
+        font-size:1.1rem;
+      }
+      .card p {
+        margin:0;
+        font-size:0.9rem;
+      }
+
+      .helper-text {
+        font-size:0.8rem;
+        color:var(--muted);
+        margin-top:0.15rem;
+      }
+
+      .weekend-item {
+        margin-top:0.7rem;
+        padding:0.7rem 0.65rem;
+        border-radius:0.9rem;
+        border:1px solid #1f2937;
+        background:rgba(15,23,42,0.7);
+      }
+
+      .weekend-header {
+        display:flex;
+        justify-content:space-between;
+        gap:0.5rem;
+        align-items:center;
+        margin-bottom:0.3rem;
+      }
+      .weekend-title {
+        font-size:0.95rem;
+        font-weight:600;
+      }
+
+      .badge-small {
+        font-size:0.75rem;
+        padding:0.15rem 0.45rem;
+        border-radius:999px;
+        background:rgba(148,163,184,0.18);
+        color:var(--muted);
+      }
+
+      .availability-row {
+        display:flex;
+        flex-wrap:wrap;
+        gap:0.4rem;
+        font-size:0.8rem;
+        margin-top:0.35rem;
+      }
+
+      .availability-pill {
+        padding:0.18rem 0.5rem;
+        border-radius:999px;
+      }
+      .availability-pill.yes {
+        background:rgba(34,197,94,0.18);
+        color:var(--good);
+      }
+      .availability-pill.maybe {
+        background:rgba(234,179,8,0.18);
+        color:var(--maybe);
+      }
+      .availability-pill.no {
+        background:rgba(248,113,113,0.18);
+        color:var(--bad);
+      }
+
+      .bar-row {
+        margin-top:0.4rem;
+        font-size:0.8rem;
+      }
+      .bar-bg {
+        width:100%;
+        height:6px;
+        border-radius:999px;
+        background:#020617;
+        overflow:hidden;
+        margin-top:0.18rem;
+      }
+      .bar-fill {
+        height:100%;
+        border-radius:999px;
+        background:linear-gradient(90deg,#22c55e,#facc15);
+      }
+
+      .flight-summary {
+        margin-top:0.35rem;
+        font-size:0.8rem;
+        color:var(--muted);
+      }
+
+      .dest-item {
+        margin-top:0.6rem;
+        padding:0.6rem 0.5rem;
+        border-radius:0.8rem;
+        border:1px solid #1f2937;
+        background:rgba(15,23,42,0.7);
+        font-size:0.9rem;
+      }
+      .dest-header {
+        display:flex;
+        justify-content:space-between;
+        gap:0.5rem;
+        align-items:flex-start;
+      }
+      .dest-name {
+        font-weight:500;
+      }
+      .dest-meta {
+        font-size:0.78rem;
+        color:var(--muted);
+        margin-top:0.15rem;
+      }
+      .dest-score {
+        text-align:right;
+        font-size:0.8rem;
+      }
+
+      .chip-small {
+        display:inline-flex;
+        align-items:center;
+        gap:0.25rem;
+        padding:0.1rem 0.45rem;
+        border-radius:999px;
+        background:rgba(15,23,42,0.8);
+        border:1px solid #1f2937;
+        font-size:0.75rem;
+      }
+
+      .suggestion-item {
+        font-size:0.86rem;
+        margin-top:0.4rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="chip">Resultados del viaje</div>
+        <h1>{trip.name}</h1>
+        <p>
+          Origen: <strong>{trip.origin_city}</strong>
+          {trip.origin_airport_code && <> ({trip.origin_airport_code})</>}
+          <br />
+          {totalParticipants > 0
+            ? <>Participantes: <strong>{totalParticipants}</strong></>
+            : <>Aún no hay participantes registrados.</>
+          }
+        </p>
+        <div class="top-actions">
+          <a href={`/join/${trip.share_code}`} class="btn-link">
+            <button class="btn btn-ghost">⬅ Volver a mis votos</button>
+          </a>
+          <a href={`/trips/${trip.id}`} class="btn-link">
+            <button class="btn btn-ghost">Panel del organizador</button>
+          </a>
+        </div>
+        {participant && (
+          <p class="helper-text">
+            Estás viendo los resultados globales como <strong>{participant.display_name}</strong>.
+          </p>
+        )}
+
+        <a href={`/join/${trip.share_code}`} class="btn-link">
+            <button class="btn btn-primary">Editar mi votación</button>
+        </a>
+
+      </header>
+
+      <main class="layout-grid">
+        <!-- IZQUIERDA: Fines de semana -->
+        <section class="card">
+          <h2>Fines de semana más viables</h2>
+          <p class="helper-text">
+            Resumen de disponibilidad del grupo. Las barras indican el porcentaje de gente que puede ir
+            a cada finde (sólo “Puedo” cuenta como disponibilidad).
+          </p>
+
+          {weekendStats.length === 0 ? (
+            <p style="margin-top:0.8rem;">Todavía no hay fines de semana definidos para este viaje.</p>
+          ) : (
+            weekendStats.map((w) => {
+              const yes = w.yes_count;
+              const maybe = w.maybe_count;
+              const no = w.no_count;
+              const yPct = pct(yes);
+              const totalVotes = w.total_votes;
+
+              const outbound = getMinPrice(w.id, 'outbound');
+              const ret      = getMinPrice(w.id, 'return');
+
+              return (
+                <div class="weekend-item">
+                  <div class="weekend-header">
+                    <div class="weekend-title">
+                      {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                    </div>
+                    <div class="badge-small">
+                      {totalVotes} voto{totalVotes === 1 ? '' : 's'}
+                    </div>
+                  </div>
+
+                  <div class="availability-row">
+                    <span class="availability-pill yes">
+                      ✅ Pueden: {yes} ({pct(yes)}%)
+                    </span>
+                    <span class="availability-pill maybe">
+                      🤔 Quizás: {maybe}
+                    </span>
+                    <span class="availability-pill no">
+                      ❌ No: {no}
+                    </span>
+                  </div>
+
+                  <div class="bar-row">
+                    <span>Disponibilidad global (sólo “Puedo”)</span>
+                    <div class="bar-bg">
+                      <div
+                        class="bar-fill"
+                        style={`width:${yPct}%;`}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div class="flight-summary">
+                    {outbound || ret ? (
+                      <>
+                        {outbound && (
+                          <>Ida desde <strong>{outbound.price} {outbound.currency}</strong>{' '}</>
+                        )}
+                        {ret && (
+                          <>· Vuelta desde <strong>{ret.price} {ret.currency}</strong></>
+                        )}
+                      </>
+                    ) : (
+                      <>Aún no hay precios cargados para este finde.</>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </section>
+
+        <!-- DERECHA: Destinos y sugerencias -->
+        <section class="card">
+          <h2>Destinos favoritos del grupo</h2>
+          <p class="helper-text">
+            Ordenados por número de votos y prioridad media (1 = más alta).
+          </p>
+
+          {destStats.length === 0 ? (
+            <p style="margin-top:0.8rem;">Todavía no hay destinos definidos.</p>
+          ) : (
+            destStats.map((d) => (
+              <div class="dest-item">
+                <div class="dest-header">
+                  <div>
+                    <div class="dest-name">
+                      {d.name}
+                      {d.country && <> – {d.country}</>}
+                    </div>
+                    <div class="dest-meta">
+                      {d.votes_count > 0
+                        ? <>Votado por {d.votes_count} persona{d.votes_count === 1 ? '' : 's'}</>
+                        : <>Aún sin votos</>
+                      }
+                    </div>
+                  </div>
+                  <div class="dest-score">
+                    {d.avg_priority !== null && d.votes_count > 0 ? (
+                      <div class="chip-small">
+                        <span>⭐ Media #{d.avg_priority.toFixed(1)}</span>
+                      </div>
+                    ) : (
+                      <div class="chip-small">
+                        <span>Sin ranking</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          <hr style="border:none; border-top:1px solid #1f2937; margin:1.1rem 0;" />
+
+          <h2>Sugerencias del grupo</h2>
+          <p class="helper-text">
+            Lugares que la gente ha propuesto (máx. 3 por persona).
+          </p>
+
+          {suggestions.length === 0 ? (
+            <p style="margin-top:0.7rem;">Todavía no hay sugerencias de destinos.</p>
+          ) : (
+            suggestions.map((s: any) => (
+              <div class="suggestion-item">
+                <strong>{s.name}</strong>
+                {s.country && <> – {s.country}</>}
+                {' · '}
+                <span style="color:var(--muted);">
+                  sugerido por {s.count} persona{s.count === 1 ? '' : 's'}
+                </span>
+              </div>
+            ))
+          )}
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
