@@ -2,6 +2,8 @@
 export const prerender = false;
 
 import { pool } from '../../lib/db';
+import '../../styles/global.css';
+
 
 const shareCode = Astro.params.shareCode!;
 
@@ -169,6 +171,10 @@ function findDestinationRank(destId: number) {
     <meta charset="utf-8" />
     <title>Votar viaje: {trip.name}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <style>
       :root {
         --bg: #020617;
@@ -449,10 +455,11 @@ function findDestinationRank(destId: number) {
                 </div>
 
                 <div class="field">
-                  <label>Crea una contraseña</label>
+                  <label>Contraseña</label>
                   <input type="password" name="password" required minlength="4" />
                   <p class="helper-text">
-                    Sólo la usarás la primera vez. Después se recordará en este dispositivo.
+                    Si es la primera vez que entras, esta será tu contraseña.
+                    Si ya has votado antes, introduce la misma contraseña que usaste.
                   </p>
                 </div>
 
@@ -466,18 +473,22 @@ function findDestinationRank(destId: number) {
       ) : (
         <!-- PANTALLA DE VOTACIÓN ÚNICA -->
         <main class="layout-grid">
-          <!-- IZQUIERDA: findes -->
+          <!-- IZQUIERDA: findes + derecha (todo en un solo form) -->
           <section class="card">
             <h2>Hola, {participant.display_name}</h2>
             <p class="helper-text">
               Marca tu disponibilidad para cada fin de semana y, si quieres, indica tus días preferidos de ida y vuelta.
             </p>
 
-            <form method="POST" action="/api/vote" style="display:grid; gap:0.9rem; margin-top:0.8rem;">
-              <input type="hidden" name="tripId" value={trip.id} />
-              <input type="hidden" name="participantId" value={participant.id} />
-              <input type="hidden" name="shareCode" value={trip.share_code} />
-
+            <form
+              id="vote-form"
+              style="display:grid; gap:0.9rem; margin-top:0.8rem;"
+              data-trip-id={trip.id}
+              data-participant-id={participant.id}
+              data-share-code={trip.share_code}
+              data-weekend-ids={JSON.stringify(weekends.map((w) => w.id))}
+              data-destination-ids={JSON.stringify(destinations.map((d) => d.id))}
+            >
               {weekends.length === 0 ? (
                 <p>No hay fines de semana definidos aún.</p>
               ) : (
@@ -533,7 +544,7 @@ function findDestinationRank(destId: number) {
                         </label>
                       </div>
 
-                      <div style="display:grid; gap:0.35rem; margin-top:0.2rem;">
+                      <!--<div style="display:grid; gap:0.35rem; margin-top:0.2rem;">
                         <div>
                           <div class="small-label">Día de ida preferido (opcional)</div>
                           <select
@@ -582,13 +593,12 @@ function findDestinationRank(destId: number) {
                             })}
                           </select>
                         </div>
-                      </div>
+                      </div>-->
                     </div>
                   );
                 })
               )}
 
-              <!-- DERECHA dentro del mismo form: destinos + sugerencias -->
               <section class="card" style="margin-top:1rem;">
                 <h2>Ciudades que te apetecen</h2>
                 <p class="helper-text">
@@ -694,5 +704,127 @@ function findDestinationRank(destId: number) {
         </main>
       )}
     </div>
+
+    {participant && (
+      <script type="module">
+        const form = document.getElementById('vote-form');
+        if (form) {
+          form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const tripId = Number(form.dataset.tripId);
+            const participantId = Number(form.dataset.participantId);
+
+            const weekendIds = JSON.parse(form.dataset.weekendIds || '[]');
+            const destinationIds = JSON.parse(form.dataset.destinationIds || '[]');
+
+            const weekendVotes = [];
+            weekendIds.forEach((id) => {
+              const availabilityInput = form.querySelector(
+                `input[name="availability_${id}"]:checked`
+              );
+              const availability = availabilityInput ? availabilityInput.value : 'maybe';
+
+              const outSelect = form.querySelector(
+                `select[name="outboundDate_${id}"]`
+              );
+              const retSelect = form.querySelector(
+                `select[name="returnDate_${id}"]`
+              );
+
+              const outboundDate = outSelect && outSelect.value
+                ? outSelect.value
+                : null;
+              const returnDate = retSelect && retSelect.value
+                ? retSelect.value
+                : null;
+
+              weekendVotes.push({
+                weekendId: Number(id),
+                availability,
+                outboundDate,
+                returnDate,
+              });
+            });
+
+            const destinationRankings = [];
+            destinationIds.forEach((id) => {
+              const sel = form.querySelector(
+                `select[name="destPriority_${id}"]`
+              );
+              if (!sel) return;
+              const val = sel.value;
+              if (!val) return;
+              const priority = Number(val);
+              if (!priority) return;
+
+              destinationRankings.push({
+                destinationId: Number(id),
+                priority,
+              });
+            });
+
+            const suggestions = [];
+            for (let i = 1; i <= 3; i++) {
+              const nameInput = form.querySelector(
+                `input[name="sugName_${i}"]`
+              );
+              const countryInput = form.querySelector(
+                `input[name="sugCountry_${i}"]`
+              );
+              const prioritySelect = form.querySelector(
+                `select[name="sugPriority_${i}"]`
+              );
+
+              const name = nameInput ? nameInput.value.trim() : '';
+              if (!name) continue;
+
+              const country = countryInput
+                ? countryInput.value.trim()
+                : '';
+              const pVal = prioritySelect ? prioritySelect.value : '';
+              const priority = pVal ? Number(pVal) : null;
+
+              suggestions.push({
+                name,
+                country: country || null,
+                priority,
+              });
+            }
+
+            const payload = {
+              tripId,
+              participantId,
+              weekendVotes,
+              destinationRankings,
+              suggestions,
+            };
+
+            try {
+              const res = await fetch('/api/vote', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+              });
+
+              if (!res.ok) {
+                const txt = await res.text();
+                console.error('Error en /api/vote:', res.status, txt);
+                alert('Error guardando tu votación');
+                return;
+              }
+
+              // Ir a pantalla de resultados
+              window.location.href = window.location.pathname + '/results';
+            } catch (err) {
+              console.error('Error de red en /api/vote:', err);
+              alert('Error de red guardando tu votación');
+            }
+          });
+        }
+      </script>
+    )}
   </body>
 </html>

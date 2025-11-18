@@ -2,6 +2,8 @@
 export const prerender = false;
 
 import { pool } from '../../lib/db';
+import '../../styles/global.css';
+
 
 const idParam = Astro.params.id;
 const tripId = Number(idParam);
@@ -173,13 +175,23 @@ function formatTimeEs(t: any) {
   return s.slice(0, 5);       // 'HH:MM' 24h
 }
 
-// Próximos 24 findes (viernes-domingo), excluyendo los ya guardados
+// Próximos 30 findes (viernes-domingo), excluyendo los ya guardados
 const suggestedWeekends = (() => {
   const list: { start: string; end: string }[] = [];
-  let currentFriday = getNextFriday();
-  const count = 24;
 
-  for (let i = 0; i < count; i++) {
+  // 1) Viernes base
+  let currentFriday = getNextFriday();
+
+  // 2) Saltar los 10 primeros findes (demasiado cercanos)
+  const SKIP = 10;
+  for (let i = 0; i < SKIP; i++) {
+    currentFriday = addDays(currentFriday, 7);
+  }
+
+  // 3) A partir de ahí, generar 30 sugerencias
+  const COUNT = 30;
+
+  for (let i = 0; i < COUNT; i++) {
     const start = currentFriday;
     const end = addDays(start, 2); // domingo
     const startStr = toYMD(start);
@@ -200,6 +212,10 @@ const suggestedWeekends = (() => {
   <head>
     <meta charset="utf-8" />
     <title>Viaje: {trip.name}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   </head>
   <body style="font-family: system-ui; max-width: 1000px; margin: 2rem auto; line-height: 1.5;">
     <a href="/trips" style="text-decoration:none;">⬅ Volver a la lista</a>
@@ -282,14 +298,21 @@ const suggestedWeekends = (() => {
       {weekends.length === 0 ? (
         <p>Aún no hay fines de semana definidos.</p>
       ) : (
-        <ul>
+        <ul data-weekends-list>
           {weekends.map((w) => (
-            <li key={w.id}>
+            <li
+              key={w.id}
+              data-weekend-id={w.id}
+              data-weekend-start={w.start_date.toISOString().slice(0, 10)}
+              data-weekend-end={w.end_date.toISOString().slice(0, 10)}
+              data-weekend-label={`${formatDate(w.start_date)} - ${formatDate(w.end_date)}`}
+            >
               <strong>{formatDate(w.start_date)} - {formatDate(w.end_date)}</strong>
               <!-- Botón eliminar finde -->
               <form
                 method="POST"
                 action="/api/weekends/delete"
+                data-role="delete-weekend"
                 style="display:inline; margin-left:0.5rem;"
               >
                 <input type="hidden" name="tripId" value={trip.id} />
@@ -307,24 +330,34 @@ const suggestedWeekends = (() => {
       )}
 
       <h3>Sugerencias rápidas (próximos findes)</h3>
-      <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;">
-        {suggestedWeekends.map((sw) => (
-          <form
-            method="POST"
-            action="/api/weekends"
-            style="margin:0;"
-          >
-            <input type="hidden" name="tripId" value={trip.id} />
-            <input type="hidden" name="startDate" value={sw.start} />
-            <input type="hidden" name="endDate" value={sw.end} />
-            <button
-              type="submit"
-              style="padding:0.3rem 0.6rem; border-radius:999px; border:1px solid #ccc; background:#f9f9f9; cursor:pointer;"
+      <div
+        data-suggested-container
+        style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;"
+      >
+        {suggestedWeekends.map((sw) => {
+          const label = `${formatDate(new Date(sw.start))} – ${formatDate(new Date(sw.end))}`;
+          return (
+            <form
+              method="POST"
+              action="/api/weekends"
+              data-role="suggested-weekend"
+              data-start={sw.start}
+              data-end={sw.end}
+              data-label={label}
+              style="margin:0;"
             >
-              {formatDate(new Date(sw.start))} – {formatDate(new Date(sw.end))}
-            </button>
-          </form>
-        ))}
+              <input type="hidden" name="tripId" value={trip.id} />
+              <input type="hidden" name="startDate" value={sw.start} />
+              <input type="hidden" name="endDate" value={sw.end} />
+              <button
+                type="submit"
+                style="padding:0.3rem 0.6rem; border-radius:999px; border:1px solid #ccc; background:#f9f9f9; cursor:pointer;"
+              >
+                {label}
+              </button>
+            </form>
+          );
+        })}
       </div>
 
       <h3>Añadir fin de semana manualmente</h3>
@@ -610,6 +643,195 @@ const suggestedWeekends = (() => {
         </table>
       )}
     </section>
+
+            <script type="module">
+      const suggestedContainer = document.querySelector('[data-suggested-container]');
+      const weekendsList = document.querySelector('[data-weekends-list]');
+
+      // ID del viaje embebido desde el server
+      const TRIP_ID = Number({trip.id});
+
+      function formatDateEs(dateStr) {
+        const d = new Date(dateStr);
+        if (Number.isNaN(d.getTime())) return dateStr;
+        return d.toLocaleDateString('es-ES', {
+          weekday: 'short',
+          day: '2-digit',
+          month: 'short'
+        });
+      }
+
+      // ------- AÑADIR FINDE DESDE "SUGERIDOS" -------
+      suggestedContainer?.addEventListener('submit', async (event) => {
+        const form = event.target.closest('form[data-role="suggested-weekend"]');
+        if (!form) return;
+
+        event.preventDefault();
+
+        const fd = new FormData(form);
+        const tripId    = Number(fd.get('tripId') || {trip.id});
+        const startDate = String(fd.get('startDate') || '');
+        const endDate   = String(fd.get('endDate') || '');
+
+        if (!startDate || !endDate) {
+          console.error('startDate/endDate vacíos al añadir finde sugerido');
+          alert('Datos de fecha incompletos.');
+          return;
+        }
+
+        try {
+          const res = await fetch(form.action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tripId, startDate, endDate }),
+          });
+
+          // Éxito si no es error 4xx/5xx
+          if (res.status >= 400) {
+            console.error('Error añadiendo finde sugerido', await res.text());
+            alert('No se ha podido añadir el fin de semana.');
+            return;
+          }
+
+          // Intentamos leer JSON, pero si falla no pasa nada
+          let data = null;
+          try {
+            data = await res.json();
+          } catch (_) {
+            // puede ser un 303 sin cuerpo, no pasa nada
+          }
+
+          // Quitamos el chip de sugeridos SIEMPRE en éxito
+          form.remove();
+
+          // Añadir a la lista de fines seleccionados
+          if (weekendsList) {
+            // Si el backend nos devolvió el finde con id, lo usamos
+            let wId   = data?.weekend?.id ?? null;
+            let start = data?.weekend?.start_date ?? startDate;
+            let end   = data?.weekend?.end_date ?? endDate;
+
+            const startStr = String(start).slice(0, 10);
+            const endStr   = String(end).slice(0, 10);
+
+            const label =
+              form.dataset.label ||
+              `${formatDateEs(startStr)} - ${formatDateEs(endStr)}`;
+
+            // Si no tenemos id (p.e. respuesta 303 sin JSON),
+            // no podremos borrar sin recargar, pero al menos
+            // visualmente se añade a la lista.
+            const li = document.createElement('li');
+            li.dataset.weekendStart = startStr;
+            li.dataset.weekendEnd = endStr;
+            li.dataset.weekendLabel = label;
+            if (wId) {
+              li.dataset.weekendId = String(wId);
+            }
+
+            li.innerHTML = `
+              <strong>${label}</strong>
+              ${
+                wId
+                  ? `<form
+                      method="POST"
+                      action="/api/weekends/delete"
+                      data-role="delete-weekend"
+                      style="display:inline; margin-left:0.5rem;"
+                    >
+                      <input type="hidden" name="tripId" value="${tripId}" />
+                      <input type="hidden" name="weekendId" value="${wId}" />
+                      <button
+                        type="submit"
+                        style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
+                      >
+                        eliminar
+                      </button>
+                    </form>`
+                  : ''
+              }
+            `;
+
+            weekendsList.appendChild(li);
+          }
+        } catch (err) {
+          console.error('Error de red al añadir finde sugerido', err);
+          alert('Error de red al añadir el fin de semana.');
+        }
+      });
+
+      // ------- ELIMINAR FINDE Y DEVOLVERLO A "SUGERIDOS" -------
+      weekendsList?.addEventListener('submit', async (event) => {
+        const form = event.target.closest('form[data-role="delete-weekend"]');
+        if (!form) return;
+
+        event.preventDefault();
+
+        const li = form.closest('li[data-weekend-start]');
+        if (!li) return;
+
+        const start = li.dataset.weekendStart;
+        const end   = li.dataset.weekendEnd;
+        const label = li.dataset.weekendLabel;
+
+        const fd = new FormData(form);
+        const tripId    = Number(fd.get('tripId') || TRIP_ID);
+        const weekendId = Number(fd.get('weekendId') || '');
+
+        if (!weekendId) {
+          console.error('weekendId vacío al eliminar finde');
+          alert('No se ha podido identificar el fin de semana.');
+          return;
+        }
+
+        try {
+          const res = await fetch(form.action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tripId, weekendId }),
+          });
+
+          if (!res.ok) {
+            console.error('Error eliminando finde', await res.text());
+            alert('No se ha podido eliminar el fin de semana.');
+            return;
+          }
+
+          // Quitamos el finde de la lista seleccionada
+          li.remove();
+
+          // Lo volvemos a añadir a la zona de sugeridos
+          if (suggestedContainer && start && end && label) {
+            const newForm = document.createElement('form');
+            newForm.method = 'POST';
+            newForm.action = '/api/weekends';
+            newForm.dataset.role = 'suggested-weekend';
+            newForm.dataset.start = start;
+            newForm.dataset.end = end;
+            newForm.dataset.label = label;
+            newForm.style.margin = '0';
+
+            newForm.innerHTML = `
+              <input type="hidden" name="tripId" value="${tripId}">
+              <input type="hidden" name="startDate" value="${start}">
+              <input type="hidden" name="endDate" value="${end}">
+              <button
+                type="submit"
+                style="padding:0.3rem 0.6rem; border-radius:999px; border:1px solid #ccc; background:#f9f9f9; cursor:pointer;"
+              >
+                ${label}
+              </button>
+            `;
+
+            suggestedContainer.appendChild(newForm);
+          }
+        } catch (err) {
+          console.error('Error de red al eliminar finde', err);
+          alert('Error de red al eliminar el fin de semana.');
+        }
+      });
+    </script>
+
 
 
   </body>

@@ -5,177 +5,153 @@ import { pool } from '../../lib/db';
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
-  const bodyText = await request.text();
-  const params = new URLSearchParams(bodyText);
+  const contentType = request.headers.get('content-type') || '';
 
-  const tripId     = Number(params.get('tripId'));
-  const participantId = Number(params.get('participantId'));
-  const shareCode  = (params.get('shareCode') ?? '').trim();
+  if (!contentType.includes('application/json')) {
+    return new Response('Content-Type debe ser application/json', { status: 400 });
+  }
 
-  if (!tripId || !participantId || !shareCode || Number.isNaN(tripId) || Number.isNaN(participantId)) {
-    return new Response('Datos inválidos', { status: 400 });
+  let body: any;
+  try {
+    body = await request.json();
+  } catch (err) {
+    console.error('Error parseando JSON en /api/vote:', err);
+    return new Response('JSON inválido', { status: 400 });
+  }
+
+  const {
+    tripId,
+    participantId,
+    weekendVotes = [],
+    destinationRankings = [],
+    suggestions = [],
+  } = body;
+
+  if (!tripId || !participantId) {
+    return new Response('tripId y participantId son obligatorios', { status: 400 });
   }
 
   const client = await pool.connect();
+
   try {
     await client.query('BEGIN');
 
-    // 1) Cargar findes y destinos de este viaje
-    const weekendsRes = await client.query(
-      'SELECT id FROM weekends WHERE trip_id = $1 ORDER BY start_date',
-      [tripId]
+    // 1) Fines de semana: disponibilidad + días
+    await client.query(
+      'DELETE FROM weekend_votes WHERE trip_id = $1 AND participant_id = $2',
+      [tripId, participantId]
     );
-    const weekends = weekendsRes.rows as { id: number }[];
 
-    const destRes = await client.query(
-      'SELECT id FROM destinations WHERE trip_id = $1 ORDER BY name',
-      [tripId]
-    );
-    const destinations = destRes.rows as { id: number }[];
-
-    // 2) Guardar votos de findes
-    // Esperamos campos:
-    //  availability_<weekendId>  (yes/maybe/no)
-    //  outboundDate_<weekendId>  (YYYY-MM-DD o vacío)
-    //  returnDate_<weekendId>    (YYYY-MM-DD o vacío)
-    for (const w of weekends) {
-      const avail = (params.get(`availability_${w.id}`) ?? '').trim();
-      const outboundDate = (params.get(`outboundDate_${w.id}`) ?? '').trim();
-      const returnDate   = (params.get(`returnDate_${w.id}`) ?? '').trim();
-
-      // Si no hay nada para este finde, ignoramos
-      if (!avail && !outboundDate && !returnDate) continue;
+    for (const wv of weekendVotes) {
+      const weekendId = Number(wv.weekendId);
+      if (!weekendId) continue;
 
       const availability =
-        avail === 'yes' || avail === 'no' || avail === 'maybe'
-          ? avail
-          : 'maybe';
+        wv.availability === 'yes' || wv.availability === 'no' ? wv.availability : 'maybe';
+
+      const outboundDate = wv.outboundDate || null; // 'YYYY-MM-DD' o null
+      const returnDate = wv.returnDate || null;     // 'YYYY-MM-DD' o null
 
       await client.query(
         `
-        INSERT INTO weekend_votes (trip_id, weekend_id, participant_id, availability, outbound_date, return_date)
-        VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''))
-        ON CONFLICT (trip_id, weekend_id, participant_id)
-        DO UPDATE SET
-          availability  = EXCLUDED.availability,
-          outbound_date = EXCLUDED.outbound_date,
-          return_date   = EXCLUDED.return_date,
-          created_at    = now()
+        INSERT INTO weekend_votes
+          (trip_id, participant_id, weekend_id, availability, outbound_date, return_date)
+        VALUES
+          ($1, $2, $3, $4, $5::date, $6::date)
         `,
-        [tripId, w.id, participantId, availability, outboundDate, returnDate]
+        [tripId, participantId, weekendId, availability, outboundDate, returnDate]
       );
     }
 
-    // 3) Guardar ranking de destinos existentes
-    // Campos: destPriority_<destinationId> = "", "1", "2", ..., "N"
-    for (const d of destinations) {
-      const pStr = (params.get(`destPriority_${d.id}`) ?? '').trim();
-      if (!pStr) {
-        // si quieres, aquí podríamos borrar ranking existente si el usuario deja en blanco
-        continue;
-      }
-      const priority = Number(pStr);
-      if (!Number.isFinite(priority) || priority <= 0) continue;
+    // 2) Rankings de destinos
+    await client.query(
+      'DELETE FROM destination_rankings WHERE trip_id = $1 AND participant_id = $2',
+      [tripId, participantId]
+    );
+
+    for (const dr of destinationRankings) {
+      const destId = Number(dr.destinationId);
+      const priority = Number(dr.priority);
+      if (!destId || !priority) continue;
 
       await client.query(
         `
-        INSERT INTO destination_rankings (trip_id, participant_id, destination_id, priority)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (trip_id, participant_id, destination_id)
-        DO UPDATE SET priority = EXCLUDED.priority, created_at = now()
+        INSERT INTO destination_rankings
+          (trip_id, participant_id, destination_id, priority)
+        VALUES
+          ($1, $2, $3, $4)
         `,
-        [tripId, participantId, d.id, priority]
+        [tripId, participantId, destId, priority]
       );
     }
 
-    // 4) Guardar sugerencias (máx. 3)
-    // Usamos 3 "slots" en el formulario:
-    //  sugName_1, sugCountry_1, sugPriority_1
-    //  sugName_2, ...
-    //  sugName_3, ...
-    type SuggestRow = {
-      name: string;
-      country: string | null;
-      priority: number | null;
-    };
-
-    const rawSuggestions: SuggestRow[] = [];
-
-    for (let i = 1; i <= 3; i++) {
-      const name = (params.get(`sugName_${i}`) ?? '').trim();
-      const country = (params.get(`sugCountry_${i}`) ?? '').trim();
-      const pStr = (params.get(`sugPriority_${i}`) ?? '').trim();
-
-      if (!name) continue; // fila vacía
-
-      let priority: number | null = null;
-      const n = Number(pStr);
-      if (Number.isFinite(n) && n >= 1 && n <= 3) {
-        priority = n;
-      }
-
-      rawSuggestions.push({
-        name,
-        country: country || null,
-        priority,
-      });
-    }
-
-    // Normalizar prioridades:
-    // - Máx. 3 sugerencias
-    // - Si no se asignan, se reparten por orden de entrada
-    const used = new Set<number>();
-    // Primero, respetar prioridades válidas y únicas
-    for (const s of rawSuggestions) {
-      if (s.priority && !used.has(s.priority)) {
-        used.add(s.priority);
-      } else {
-        s.priority = null;
-      }
-    }
-
-    const allPri = [1, 2, 3];
-    let idx = 0;
-    for (const s of rawSuggestions) {
-      if (s.priority) continue;
-      while (idx < allPri.length && used.has(allPri[idx])) idx++;
-      if (idx < allPri.length) {
-        s.priority = allPri[idx];
-        used.add(allPri[idx]);
-        idx++;
-      } else {
-        s.priority = null; // sin hueco, en práctica no debería pasar con 3 sugerencias máx.
-      }
-    }
-
-    // Borramos las sugerencias anteriores de este participante y grabamos las nuevas
+        // 3) Sugerencias de destinos (máx. 3)
     await client.query(
       'DELETE FROM participant_destination_suggestions WHERE trip_id = $1 AND participant_id = $2',
       [tripId, participantId]
     );
 
-    for (const s of rawSuggestions) {
+    // Mapear por nombre para quedarnos con máximo 1 registro por ciudad
+    const byName = new Map<
+      string,
+      { country: string | null; priority: number | null }
+    >();
+
+    let autoPriorityCounter = 1;
+
+    for (const s of suggestions) {
+      const rawName = (s.name || '').trim();
+      if (!rawName) continue;
+
+      const name = rawName;
+      const country = s.country ? String(s.country).trim() : null;
+
+      let finalPriority: number | null = null;
+
+      if (s.priority != null && s.priority !== '') {
+        const p = Number(s.priority);
+        if (p >= 1 && p <= 3) {
+          finalPriority = p;
+        }
+      }
+
+      if (finalPriority == null) {
+        // prioridad automática 1, 2, 3 por orden de entrada
+        finalPriority = autoPriorityCounter;
+        autoPriorityCounter += 1;
+      }
+
+      if (finalPriority > 3) finalPriority = 3;
+
+      // Si la ciudad ya existía en el formulario, nos quedamos con la última versión
+      byName.set(name, { country, priority: finalPriority });
+    }
+
+    // Nos quedamos con máximo 3 ciudades distintas
+    const uniqueSuggestions = Array.from(byName.entries()).slice(0, 3);
+
+    for (const [name, info] of uniqueSuggestions) {
       await client.query(
         `
-        INSERT INTO participant_destination_suggestions (trip_id, participant_id, name, country, priority)
+        INSERT INTO participant_destination_suggestions
+          (trip_id, participant_id, name, country, priority)
         VALUES ($1, $2, $3, $4, $5)
         `,
-        [tripId, participantId, s.name, s.country, s.priority]
+        [tripId, participantId, name, info.country, info.priority]
       );
     }
 
+
     await client.query('COMMIT');
 
-    return new Response(null, {
-      status: 303,
-      headers: {
-        Location: `/join/${encodeURIComponent(shareCode)}/results`,
-      },
-    });
+    return new Response(
+      JSON.stringify({ status: 'ok' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (err) {
-    console.error('Error guardando votación completa:', err);
     await client.query('ROLLBACK');
-    return new Response('Error guardando tu votación', { status: 500 });
+    console.error('Error guardando votación completa:', err);
+    return new Response('Error guardando votación completa', { status: 500 });
   } finally {
     client.release();
   }

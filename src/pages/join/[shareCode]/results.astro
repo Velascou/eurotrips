@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import { pool } from '../../../lib/db';
+import '../../../styles/global.css';
 
 const shareCode = Astro.params.shareCode!;
 
@@ -189,6 +190,9 @@ function pct(count: number) {
     <meta charset="utf-8" />
     <title>Resultados del viaje: {trip.name}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       :root {
         --bg: #020617;
@@ -452,14 +456,14 @@ function pct(count: number) {
             : <>Aún no hay participantes registrados.</>
           }
         </p>
-        <div class="top-actions">
+        <!--<div class="top-actions">
           <a href={`/join/${trip.share_code}`} class="btn-link">
             <button class="btn btn-ghost">⬅ Volver a mis votos</button>
           </a>
           <a href={`/trips/${trip.id}`} class="btn-link">
             <button class="btn btn-ghost">Panel del organizador</button>
           </a>
-        </div>
+        </div>-->
         {participant && (
           <p class="helper-text">
             Estás viendo los resultados globales como <strong>{participant.display_name}</strong>.
@@ -485,16 +489,20 @@ function pct(count: number) {
             <p style="margin-top:0.8rem;">Todavía no hay fines de semana definidos para este viaje.</p>
           ) : (
             weekendStats.map((w) => {
-              const yes = w.yes_count;
-              const maybe = w.maybe_count;
-              const no = w.no_count;
-              const yPct = pct(yes);
-              const totalVotes = w.total_votes;
+                const yes = w.yes_count;
+                const maybe = w.maybe_count;
+                const no = w.no_count;
 
-              const outbound = getMinPrice(w.id, 'outbound');
-              const ret      = getMinPrice(w.id, 'return');
+                // Disponibilidad = sí + quizás
+                const availCount = yes + maybe;
+                const availPct   = pct(availCount);
 
-              return (
+                const totalVotes = w.total_votes;
+
+                const outbound = getMinPrice(w.id, 'outbound');
+                const ret      = getMinPrice(w.id, 'return');
+
+                return (
                 <div class="weekend-item">
                   <div class="weekend-header">
                     <div class="weekend-title">
@@ -518,12 +526,12 @@ function pct(count: number) {
                   </div>
 
                   <div class="bar-row">
-                    <span>Disponibilidad global (sólo “Puedo”)</span>
+                    <span>Disponibilidad global (Puedo + Quizás)</span>
                     <div class="bar-bg">
-                      <div
+                        <div
                         class="bar-fill"
-                        style={`width:${yPct}%;`}
-                      ></div>
+                        style={`width:${availPct}%;`}
+                        ></div>
                     </div>
                   </div>
 
