@@ -4,9 +4,6 @@ export const prerender = false;
 import { pool } from '../../lib/db';
 
 const shareCode = Astro.params.shareCode!;
-const url = Astro.url;
-const participantIdParam = url.searchParams.get('participantId');
-const participantId = participantIdParam ? Number(participantIdParam) : null;
 
 // 1) Viaje por share_code
 const tripRes = await pool.query(
@@ -19,7 +16,48 @@ if (!trip) {
   throw new Error('Viaje no encontrado');
 }
 
-// 2) Destinos y findes
+// 2) Participantes del viaje (para que el viajero elija su “slot”)
+const participantsRes = await pool.query(
+  `SELECT id, display_name, email
+   FROM participants
+   WHERE trip_id = $1
+   ORDER BY created_at`,
+  [trip.id]
+);
+const participants = participantsRes.rows;
+
+// 3) Determinar participante a partir de la cookie de sesión
+const sessionToken = Astro.cookies.get('eurotrip_session')?.value ?? null;
+let participant: any = null;
+
+if (sessionToken) {
+  const sRes = await pool.query(
+    `
+    SELECT
+      s.participant_id,
+      p.display_name,
+      p.email
+    FROM participant_sessions s
+    JOIN participants p ON p.id = s.participant_id
+    WHERE
+      s.session_token = $1
+      AND s.trip_id = $2
+      AND s.expires_at > now()
+    `,
+    [sessionToken, trip.id]
+  );
+
+  if (sRes.rowCount > 0) {
+    const row = sRes.rows[0];
+    participant = {
+      id: row.participant_id,
+      display_name: row.display_name,
+      email: row.email,
+    };
+  }
+}
+
+// 4) Destinos, findes y vuelos
 const destRes = await pool.query(
   'SELECT id, name, country, airport_code FROM destinations WHERE trip_id = $1 ORDER BY name',
   [trip.id]
@@ -32,38 +70,6 @@ const weekendsRes = await pool.query(
 );
 const weekends = weekendsRes.rows;
 
-// 3) Participante + votos existentes
-let participant: any = null;
-let weekendVotes: any[] = [];
-let destinationRanks: any[] = [];
-
-if (participantId) {
-  const pRes = await pool.query(
-    'SELECT id, display_name, email FROM participants WHERE id = $1 AND trip_id = $2',
-    [participantId, trip.id]
-  );
-  participant = pRes.rows[0] ?? null;
-
-  if (participant) {
-    const wvRes = await pool.query(
-      `SELECT weekend_id, availability, outbound_date, return_date
-       FROM weekend_votes
-       WHERE trip_id = $1 AND participant_id = $2`,
-      [trip.id, participantId]
-    );
-    weekendVotes = wvRes.rows;
-
-    const drRes = await pool.query(
-      `SELECT destination_id, priority
-       FROM destination_rankings
-       WHERE trip_id = $1 AND participant_id = $2`,
-      [trip.id, participantId]
-    );
-    destinationRanks = drRes.rows;
-  }
-}
-
-// 4) Vuelos: mismos datos que en la vista de admin, pero para mostrar mínimos
 const flightsRes = await pool.query(
   `SELECT
      id,
@@ -81,7 +87,39 @@ const flightsRes = await pool.query(
 );
 const flights = flightsRes.rows;
 
-// Agrupar vuelos por destino+finde+direction+fecha
+// 5) Votos y sugerencias del participante (solo si hay sesión)
+let weekendVotes: any[] = [];
+let destinationRanks: any[] = [];
+let suggestions: any[] = [];
+
+if (participant) {
+  const wvRes = await pool.query(
+    `SELECT weekend_id, availability, outbound_date, return_date
+     FROM weekend_votes
+     WHERE trip_id = $1 AND participant_id = $2`,
+    [trip.id, participant.id]
+  );
+  weekendVotes = wvRes.rows;
+
+  const drRes = await pool.query(
+    `SELECT destination_id, priority
+     FROM destination_rankings
+     WHERE trip_id = $1 AND participant_id = $2`,
+    [trip.id, participant.id]
+  );
+  destinationRanks = drRes.rows;
+
+  const sugRes = await pool.query(
+    `SELECT id, name, country, created_at
+     FROM participant_destination_suggestions
+     WHERE trip_id = $1 AND participant_id = $2
+     ORDER BY created_at`,
+    [trip.id, participant.id]
+  );
+  suggestions = sugRes.rows;
+}
+
+// 6) Agrupar vuelos
 type FlightRow = (typeof flights)[number];
 const groupedFlights = new Map<string, FlightRow[]>();
 
@@ -100,17 +138,15 @@ function formatDate(d: Date) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
 }
 
-// Helper para encontrar voto de un finde
+// Helpers votos
 function findWeekendVote(weekendId: number) {
   return weekendVotes.find((w) => w.weekend_id === weekendId) ?? null;
 }
-
-// Helper para ranking de destino
 function findDestinationRank(destId: number) {
   return destinationRanks.find((r) => r.destination_id === destId)?.priority ?? '';
 }
 
-// Días de ida/vuelta (mismo criterio que admin)
+// Días de ida/vuelta
 function outboundDatesForWeekend(w: any) {
   return [
     new Date(w.start_date.getTime() - 2 * 24*60*60*1000),
@@ -137,7 +173,6 @@ function returnDatesForWeekend(w: any) {
     <style>
       :root {
         --bg: #020617;
-        --bg-soft: #020617;
         --card: #020617;
         --card-border: #1e293b;
         --accent: #f97316;
@@ -145,7 +180,6 @@ function returnDatesForWeekend(w: any) {
         --accent-text: #fed7aa;
         --fg: #e5e7eb;
         --muted: #9ca3af;
-        --danger: #f87171;
       }
 
       * { box-sizing: border-box; }
@@ -228,9 +262,8 @@ function returnDatesForWeekend(w: any) {
         margin-bottom: 0.6rem;
       }
 
-      input[type="text"],
-      input[type="email"],
-      select {
+      select,
+      input[type="password"] {
         width: 100%;
         border-radius: 0.7rem;
         border: 1px solid #1f2937;
@@ -263,13 +296,10 @@ function returnDatesForWeekend(w: any) {
         color: var(--fg);
       }
 
-      .weekend-chip-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.35rem;
-        margin-bottom: 0.4rem;
-        font-size: 0.8rem;
+      .helper-text {
+        font-size: 0.78rem;
         color: var(--muted);
+        margin-top: 0.25rem;
       }
 
       .weekend-card {
@@ -279,11 +309,19 @@ function returnDatesForWeekend(w: any) {
         border: 1px solid #1f2937;
         background: rgba(15, 23, 42, 0.7);
       }
-
       .weekend-title {
         font-size: 0.95rem;
         font-weight: 600;
         margin-bottom: 0.25rem;
+      }
+
+      .weekend-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-bottom: 0.4rem;
+        font-size: 0.8rem;
+        color: var(--muted);
       }
 
       .pill-group {
@@ -291,7 +329,6 @@ function returnDatesForWeekend(w: any) {
         gap: 0.3rem;
         margin: 0.25rem 0 0.45rem;
       }
-
       .pill {
         flex: 1;
         padding: 0.35rem 0.3rem;
@@ -300,52 +337,30 @@ function returnDatesForWeekend(w: any) {
         background: #020617;
         font-size: 0.8rem;
         text-align: center;
-        }
-        .pill input {
+      }
+      .pill input {
         display: none;
-        }
-        .pill span {
+      }
+      .pill span {
         pointer-events: none;
-        }
-
-        /* Colores dinámicos según el radio esté checked */
-        .pill--yes:has(input:checked) {
+      }
+      .pill--yes:has(input:checked) {
         border-color: #22c55e;
         background: rgba(34, 197, 94, 0.14);
-        }
-        .pill--maybe:has(input:checked) {
+      }
+      .pill--maybe:has(input:checked) {
         border-color: #eab308;
         background: rgba(234, 179, 8, 0.14);
-        }
-        .pill--no:has(input:checked) {
+      }
+      .pill--no:has(input:checked) {
         border-color: #f97373;
         background: rgba(248, 113, 113, 0.14);
-        }
+      }
 
       .small-label {
         font-size: 0.78rem;
         color: var(--muted);
         margin-bottom: 0.2rem;
-      }
-
-      .flights-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.4rem;
-        margin-top: 0.35rem;
-      }
-
-      .flights-col {
-        font-size: 0.78rem;
-      }
-
-      .flight-line {
-        display: flex;
-        justify-content: space-between;
-      }
-
-      .flight-price {
-        color: var(--accent-text);
       }
 
       .dest-row {
@@ -356,15 +371,13 @@ function returnDatesForWeekend(w: any) {
         margin-bottom: 0.45rem;
         font-size: 0.9rem;
       }
-
       .dest-name {
         font-weight: 500;
       }
 
-      .helper-text {
-        font-size: 0.78rem;
-        color: var(--muted);
-        margin-top: 0.25rem;
+      .suggestion-item {
+        font-size: 0.85rem;
+        margin-bottom: 0.3rem;
       }
     </style>
   </head>
@@ -382,38 +395,58 @@ function returnDatesForWeekend(w: any) {
       </header>
 
       {!participant ? (
-        <!-- FORM DE PRESENTACIÓN -->
-        <main class="layout-grid">
+        <!-- FORM DE REGISTRO: elegir viajero + contraseña -->
+        <main>
           <section class="card">
-            <h2>Preséntate para votar</h2>
+            <h2>Identifícate como viajero</h2>
             <p class="helper-text">
-              Pon tu nombre (y si quieres tu email) para poder guardar tus preferencias de fechas y destinos.
+              El organizador ha creado una lista de viajeros. Elige tu nombre y crea una contraseña para guardar tus votos.
             </p>
-            <form method="POST" action="/api/participants" style="display:grid; gap:0.7rem; margin-top:0.7rem;">
-              <input type="hidden" name="tripId" value={trip.id} />
-              <input type="hidden" name="shareCode" value={trip.share_code} />
-              <div class="field">
-                <label>Nombre</label>
-                <input name="displayName" required />
-              </div>
-              <div class="field">
-                <label>Email (opcional)</label>
-                <input name="email" type="email" />
-              </div>
-              <button type="submit" class="btn-primary">
-                Empezar a votar
-              </button>
-            </form>
+
+            {participants.length === 0 ? (
+              <p>El organizador aún no ha añadido viajeros para este viaje.</p>
+            ) : (
+              <form
+                method="POST"
+                action="/api/auth/register"
+                style="display:grid; gap:0.7rem; margin-top:0.7rem;"
+              >
+                <input type="hidden" name="tripId" value={trip.id} />
+                <input type="hidden" name="shareCode" value={trip.share_code} />
+
+                <div class="field">
+                  <label>¿Quién eres?</label>
+                  <select name="participantId" required>
+                    <option value="">Selecciona tu nombre...</option>
+                    {participants.map((p) => (
+                      <option value={p.id}>{p.display_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Crea una contraseña</label>
+                  <input type="password" name="password" required minlength="4" />
+                  <p class="helper-text">
+                    Sólo la usarás la primera vez. Después se recordará en este dispositivo.
+                  </p>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                  Continuar
+                </button>
+              </form>
+            )}
           </section>
         </main>
       ) : (
+        <!-- VISTA DE VOTACIÓN -->
         <main class="layout-grid">
-          <!-- COLUMNA IZQUIERDA: Fines de semana -->
+          <!-- IZQUIERDA: Fines de semana -->
           <section class="card">
-            <h2>Disponibilidad por finde</h2>
+            <h2>Hola, {participant.display_name}</h2>
             <p class="helper-text">
-              Para cada fin de semana indica si puedes, quizá o no puedes. Si marcas que puedes o quizá, también puedes
-              elegir el día de ida y vuelta que te viene mejor.
+              Marca tu disponibilidad por fin de semana y, si quieres, elige tus días preferidos de ida y vuelta.
             </p>
 
             {weekends.length === 0 ? (
@@ -443,50 +476,51 @@ function returnDatesForWeekend(w: any) {
 
                     <div class="weekend-chip-row">
                       <span>
-                        Ida desde {formatDate(outDates[0])} hasta {formatDate(outDates[outDates.length - 1])}
+                        Ida entre {formatDate(outDates[0])} y {formatDate(outDates[outDates.length - 1])}
                       </span>
                       <span>·</span>
                       <span>
-                        Vuelta desde {formatDate(retDates[0])} hasta {formatDate(retDates[retDates.length - 1])}
+                        Vuelta entre {formatDate(retDates[0])} y {formatDate(retDates[retDates.length - 1])}
                       </span>
                     </div>
 
-                    {/* Disponibilidad */}
                     <div class="pill-group">
-                    <label class="pill pill--yes">
+                      <label class="pill pill--yes">
                         <input
-                        type="radio"
-                        name="availability"
-                        value="yes"
-                        checked={currentAvail === 'yes'}
+                          type="radio"
+                          name="availability"
+                          value="yes"
+                          checked={currentAvail === 'yes'}
                         />
                         <span>✅ Puedo</span>
-                    </label>
-                    <label class="pill pill--maybe">
+                      </label>
+                      <label class="pill pill--maybe">
                         <input
-                        type="radio"
-                        name="availability"
-                        value="maybe"
-                        checked={currentAvail === 'maybe'}
+                          type="radio"
+                          name="availability"
+                          value="maybe"
+                          checked={currentAvail === 'maybe'}
                         />
                         <span>🤔 Quizás</span>
-                    </label>
-                    <label class="pill pill--no">
+                      </label>
+                      <label class="pill pill--no">
                         <input
-                        type="radio"
-                        name="availability"
-                        value="no"
-                        checked={currentAvail === 'no'}
+                          type="radio"
+                          name="availability"
+                          value="no"
+                          checked={currentAvail === 'no'}
                         />
                         <span>❌ No</span>
-                    </label>
+                      </label>
                     </div>
 
-                    {/* Selects de ida / vuelta */}
                     <div style="display:grid; gap:0.35rem; margin-top:0.2rem;">
                       <div>
                         <div class="small-label">Día de ida preferido (opcional)</div>
-                        <select name="outboundDate" value={vote?.outbound_date?.toISOString?.().slice(0,10) ?? ''}>
+                        <select
+                          name="outboundDate"
+                          value={vote?.outbound_date?.toISOString?.().slice(0,10) ?? ''}
+                        >
                           <option value="">Sin preferencia</option>
                           {outDates.map((dDate) => {
                             const ds = dDate.toISOString().slice(0,10);
@@ -507,7 +541,10 @@ function returnDatesForWeekend(w: any) {
                       </div>
                       <div>
                         <div class="small-label">Día de vuelta preferido (opcional)</div>
-                        <select name="returnDate" value={vote?.return_date?.toISOString?.().slice(0,10) ?? ''}>
+                        <select
+                          name="returnDate"
+                          value={vote?.return_date?.toISOString?.().slice(0,10) ?? ''}
+                        >
                           <option value="">Sin preferencia</option>
                           {retDates.map((dDate) => {
                             const ds = dDate.toISOString().slice(0,10);
@@ -528,7 +565,11 @@ function returnDatesForWeekend(w: any) {
                       </div>
                     </div>
 
-                    <button type="submit" class="btn-ghost" style="margin-top:0.6rem; width:100%; font-size:0.85rem;">
+                    <button
+                      type="submit"
+                      class="btn-ghost"
+                      style="margin-top:0.6rem; width:100%; font-size:0.85rem;"
+                    >
                       Guardar para este finde
                     </button>
                   </form>
@@ -537,11 +578,11 @@ function returnDatesForWeekend(w: any) {
             )}
           </section>
 
-          <!-- COLUMNA DERECHA: ranking de destinos -->
+          <!-- DERECHA: Ranking de destinos + sugerencias -->
           <section class="card">
-            <h2>Prioridad de destinos</h2>
+            <h2>Destinos y prioridades</h2>
             <p class="helper-text">
-              Ordena los lugares que más te apetecen. El 1 es tu primera opción, 2 la segunda, etc.
+              Ordena los destinos propuestos y sugiere hasta 3 lugares nuevos que te apetezca visitar.
             </p>
 
             {destinations.length === 0 ? (
@@ -582,7 +623,11 @@ function returnDatesForWeekend(w: any) {
                           <option value={i + 1}>{i + 1}</option>
                         ))}
                       </select>
-                      <button type="submit" class="btn-ghost" style="font-size:0.75rem; padding:0.25rem 0.6rem;">
+                      <button
+                        type="submit"
+                        class="btn-ghost"
+                        style="font-size:0.75rem; padding:0.25rem 0.6rem;"
+                      >
                         Guardar
                       </button>
                     </div>
@@ -592,6 +637,58 @@ function returnDatesForWeekend(w: any) {
                   Puedes cambiar las prioridades tantas veces como quieras; siempre se guarda la última versión.
                 </p>
               </div>
+            )}
+
+            <hr style="border:none; border-top:1px solid #1f2937; margin:1.2rem 0;" />
+
+            <h3>Tus sugerencias (máx. 3)</h3>
+            {suggestions.length === 0 ? (
+              <p class="helper-text">Aún no has sugerido ningún destino.</p>
+            ) : (
+              <div style="margin-top:0.4rem;">
+                {suggestions.map((s) => (
+                  <div class="suggestion-item">
+                    <strong>{s.name}</strong>
+                    {s.country && <> – {s.country}</>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {suggestions.length < 3 ? (
+              <form
+                method="POST"
+                action="/api/destination-suggestions"
+                style="display:grid; gap:0.4rem; margin-top:0.6rem;"
+              >
+                <input type="hidden" name="tripId" value={trip.id} />
+                <input type="hidden" name="participantId" value={participant.id} />
+                <input type="hidden" name="shareCode" value={trip.share_code} />
+
+                <div class="field">
+                  <label>Ciudad</label>
+                  <input
+                    name="name"
+                    required
+                    style="width:100%; padding:0.5rem 0.7rem; border-radius:0.7rem; border:1px solid #1f2937; background:#020617; color:var(--fg);"
+                  />
+                </div>
+                <div class="field">
+                  <label>País (opcional)</label>
+                  <input
+                    name="country"
+                    style="width:100%; padding:0.5rem 0.7rem; border-radius:0.7rem; border:1px solid #1f2937; background:#020617; color:var(--fg);"
+                  />
+                </div>
+
+                <button type="submit" class="btn-primary" style="margin-top:0.2rem;">
+                  Añadir sugerencia
+                </button>
+              </form>
+            ) : (
+              <p class="helper-text" style="margin-top:0.6rem;">
+                Ya has sugerido 3 destinos. Si quieres cambiar alguno, pídeselo al organizador.
+              </p>
             )}
           </section>
         </main>

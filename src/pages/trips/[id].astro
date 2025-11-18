@@ -62,6 +62,61 @@ const flightsRes = await pool.query(
 
 const flights = flightsRes.rows;
 
+// 5) Participantes
+// debajo de donde cargas trip/destinations/weekends...
+const participantsRes = await pool.query(
+  `SELECT id, display_name, email, created_at
+   FROM participants
+   WHERE trip_id = $1
+   ORDER BY created_at`,
+  [tripId]
+);
+const participants = participantsRes.rows;
+
+
+// 6) Resumen de disponibilidad por finde
+const weekendStatsRes = await pool.query(
+  `
+  SELECT
+    w.id,
+    w.start_date,
+    w.end_date,
+    COALESCE(SUM(CASE WHEN v.availability = 'yes'   THEN 1 ELSE 0 END), 0) AS yes_count,
+    COALESCE(SUM(CASE WHEN v.availability = 'maybe' THEN 1 ELSE 0 END), 0) AS maybe_count,
+    COALESCE(SUM(CASE WHEN v.availability = 'no'    THEN 1 ELSE 0 END), 0) AS no_count
+  FROM weekends w
+  LEFT JOIN weekend_votes v
+    ON v.weekend_id = w.id
+    AND v.trip_id    = w.trip_id
+  WHERE w.trip_id = $1
+  GROUP BY w.id, w.start_date, w.end_date
+  ORDER BY w.start_date
+  `,
+  [tripId]
+);
+const weekendStats = weekendStatsRes.rows;
+
+// 7) Resumen de ranking de destinos
+const destStatsRes = await pool.query(
+  `
+  SELECT
+    d.id,
+    d.name,
+    d.country,
+    COUNT(r.*)                         AS voters,
+    AVG(r.priority)::numeric(10,2)     AS avg_priority
+  FROM destinations d
+  LEFT JOIN destination_rankings r
+    ON r.destination_id = d.id
+    AND r.trip_id       = d.trip_id
+  WHERE d.trip_id = $1
+  GROUP BY d.id, d.name, d.country
+  ORDER BY avg_priority ASC NULLS LAST, d.name
+  `,
+  [tripId]
+);
+const destinationStats = destStatsRes.rows;
+
 // Agrupar vuelos por destino + finde + dirección + día
 type FlightGroupKey = string;
 type FlightRow = (typeof flights)[number];
@@ -412,5 +467,150 @@ const suggestedWeekends = (() => {
         </>
       )}
     </section>
+
+        <section style="margin-top: 2rem;">
+      <h2>Viajeros</h2>
+
+      {participants.length === 0 ? (
+        <p>Aún no hay viajeros definidos para este viaje.</p>
+      ) : (
+        <ul>
+          {participants.map((p) => (
+            <li key={p.id}>
+              <strong>{p.display_name}</strong>
+              {p.email && <> – {p.email}</>}
+              <span style="color:#666; font-size:0.85rem;">
+                {' '}({new Date(p.created_at).toLocaleString('es-ES')})
+              </span>
+              <form
+                method="POST"
+                action="/api/participants/delete"
+                style="display:inline; margin-left:0.5rem;"
+              >
+                <input type="hidden" name="tripId" value={trip.id} />
+                <input type="hidden" name="participantId" value={p.id} />
+                <button
+                  type="submit"
+                  style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
+                >
+                  eliminar
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3>Añadir viajero</h3>
+      <form method="POST" action="/api/participants" style="display:grid; gap:0.5rem; max-width:400px;">
+        <input type="hidden" name="tripId" value={trip.id} />
+        <label>
+          Nombre<br />
+          <input name="displayName" required style="width:100%; padding:0.3rem;" />
+        </label>
+        <label>
+          Email (opcional)<br />
+          <input name="email" type="email" style="width:100%; padding:0.3rem;" />
+        </label>
+        <button type="submit" style="margin-top:0.5rem; padding:0.4rem 0.8rem;">
+          Guardar viajero
+        </button>
+      </form>
+    </section>
+
+
+
+     <!-- Participantes -->
+    <section style="margin-top: 3rem;">
+      <h2>Participantes</h2>
+      {participants.length === 0 ? (
+        <p>Aún no hay nadie apuntado usando el enlace de invitación.</p>
+      ) : (
+        <ul>
+          {participants.map((p) => (
+            <li key={p.id}>
+              <strong>{p.display_name}</strong>
+              {p.email && <> – {p.email}</>}
+              <span style="color:#666; font-size:0.85rem;">
+                {' '}({new Date(p.created_at).toLocaleString('es-ES')})
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+
+    <!-- Resumen de fines de semana -->
+    <section style="margin-top: 2rem;">
+      <h2>Resumen disponibilidad por finde</h2>
+      {weekendStats.length === 0 ? (
+        <p>No hay fines de semana ni votos todavía.</p>
+      ) : (
+        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:0.3rem; border-bottom:1px solid #ccc;">Finde</th>
+              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">✅ Pueden</th>
+              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">🤔 Quizás</th>
+              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">❌ No</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weekendStats.map((w) => (
+              <tr key={w.id}>
+                <td style="padding:0.3rem; border-bottom:1px solid #eee;">
+                  {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                </td>
+                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
+                  {w.yes_count}
+                </td>
+                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
+                  {w.maybe_count}
+                </td>
+                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
+                  {w.no_count}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+
+    <!-- Resumen destinos -->
+    <section style="margin-top: 2rem; margin-bottom:3rem;">
+      <h2>Ranking de destinos</h2>
+      {destinationStats.length === 0 ? (
+        <p>No hay destinos o aún no hay rankings.</p>
+      ) : (
+        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:0.3rem; border-bottom:1px solid #ccc;">Destino</th>
+              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">Votos</th>
+              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">Prioridad media</th>
+            </tr>
+          </thead>
+          <tbody>
+            {destinationStats.map((d) => (
+              <tr key={d.id}>
+                <td style="padding:0.3rem; border-bottom:1px solid #eee;">
+                  <strong>{d.name}</strong>
+                  {d.country && <> – {d.country}</>}
+                </td>
+                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
+                  {d.voters}
+                </td>
+                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
+                  {d.avg_priority ? Number(d.avg_priority).toFixed(2) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+
+
   </body>
 </html>
