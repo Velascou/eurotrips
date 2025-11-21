@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import { pool } from '../../../lib/db';
+import { normalize } from '../../../lib/airports';
 import '../../../styles/global.css';
 
 const shareCode = Astro.params.shareCode!;
@@ -78,7 +79,6 @@ const weekendStatsRes = await pool.query(
   [trip.id]
 );
 
-// casteamos a number para no liarnos en la plantilla
 const weekendStats = weekendStatsRes.rows.map((r) => ({
   id: r.id,
   start_date: r.start_date,
@@ -89,20 +89,74 @@ const weekendStats = weekendStatsRes.rows.map((r) => ({
   total_votes: Number(r.total_votes ?? 0),
 }));
 
-// 5) Precios mínimos de vuelos por finde (ida / vuelta)
-const flightAggRes = await pool.query(
+// 5) Ranking de destinos (para saber el top-3)
+const destStatsRes = await pool.query(
   `
   SELECT
-    weekend_id,
-    direction,
-    MIN(price_per_person) AS min_price,
-    MIN(currency)         AS currency
-  FROM flight_day_options
-  WHERE trip_id = $1
-  GROUP BY weekend_id, direction
+    d.id,
+    d.name,
+    d.country,
+    COUNT(r.*)             AS votes_count,
+    AVG(r.priority)::float AS avg_priority
+  FROM destinations d
+  LEFT JOIN destination_rankings r
+    ON r.trip_id = d.trip_id
+   AND r.destination_id = d.id
+  WHERE d.trip_id = $1
+  GROUP BY d.id
+  ORDER BY
+    votes_count DESC,
+    avg_priority ASC NULLS LAST,
+    d.name ASC
   `,
   [trip.id]
 );
+
+const destStats = destStatsRes.rows.map((r) => ({
+  id: r.id,
+  name: r.name,
+  country: r.country,
+  votes_count: Number(r.votes_count ?? 0),
+  avg_priority: r.avg_priority !== null ? Number(r.avg_priority) : null,
+}));
+
+// A partir de ahora: sólo los 3 destinos más votados cuentan para los precios de vuelos
+const topDestIds = destStats.slice(0, 3).map((d) => d.id);
+
+// 6) Precios mínimos de vuelos por finde (ida / vuelta), sólo top-3 destinos
+let flightAggRes;
+
+if (topDestIds.length > 0) {
+  flightAggRes = await pool.query(
+    `
+    SELECT
+      weekend_id,
+      direction,
+      MIN(price_per_person) AS min_price,
+      MIN(currency)         AS currency
+    FROM flight_day_options
+    WHERE trip_id = $1
+      AND destination_id = ANY($2)
+    GROUP BY weekend_id, direction
+    `,
+    [trip.id, topDestIds]
+  );
+} else {
+  // Si no hay destinos o no hay rankings, volvemos al comportamiento antiguo
+  flightAggRes = await pool.query(
+    `
+    SELECT
+      weekend_id,
+      direction,
+      MIN(price_per_person) AS min_price,
+      MIN(currency)         AS currency
+    FROM flight_day_options
+    WHERE trip_id = $1
+    GROUP BY weekend_id, direction
+    `,
+    [trip.id]
+  );
+}
 
 type FlightAgg = {
   weekend_id: number;
@@ -128,56 +182,143 @@ function getMinPrice(weekendId: number, direction: 'outbound' | 'return') {
   return flightAggMap.get(key) ?? null;
 }
 
-// 6) Ranking de destinos
-const destStatsRes = await pool.query(
-  `
-  SELECT
-    d.id,
-    d.name,
-    d.country,
-    COUNT(r.*)           AS votes_count,
-    AVG(r.priority)::float AS avg_priority
-  FROM destinations d
-  LEFT JOIN destination_rankings r
-    ON r.trip_id = d.trip_id
-   AND r.destination_id = d.id
-  WHERE d.trip_id = $1
-  GROUP BY d.id
-  ORDER BY
-    votes_count DESC,
-    avg_priority ASC NULLS LAST,
-    d.name ASC
-  `,
+// 7) Sugerencias de destinos (agrupadas + normalizadas)
+const sugRowsRes = await pool.query(
+  `SELECT name, country, priority FROM participant_destination_suggestions WHERE trip_id = $1`,
   [trip.id]
 );
 
-const destStats = destStatsRes.rows.map((r) => ({
-  id: r.id,
-  name: r.name,
-  country: r.country,
-  votes_count: Number(r.votes_count ?? 0),
-  avg_priority: r.avg_priority !== null ? Number(r.avg_priority) : null,
-}));
+type SugRow = { name: string; country: string | null; priority: number };
+const weights: Record<number, number> = { 1: 1.0, 2: 0.9, 3: 0.75 };
 
-// 7) Sugerencias de destinos (agrupadas)
-const sugRes = await pool.query(
-  `
-  SELECT
-    name,
-    country,
-    COUNT(*)::int AS count
-  FROM participant_destination_suggestions
-  WHERE trip_id = $1
-  GROUP BY name, country
-  ORDER BY count DESC, name ASC
-  `,
+// lookup de destinos ya creados
+const destsRes = await pool.query(
+  'SELECT id, name, country FROM destinations WHERE trip_id = $1',
   [trip.id]
 );
-const suggestions = sugRes.rows;
+const existingDests = destsRes.rows;
+const destNameToId = new Map<string, number>();
+
+for (const d of existingDests) {
+  const k = normalize(d.name || '');
+  destNameToId.set(k + '||' + normalize(d.country || ''), d.id);
+  destNameToId.set(k + '||', d.id);
+}
+
+const sugMap = new Map<
+  string,
+  {
+    displayVariants: Map<string, number>;
+    country: string | null;
+    voters: number;
+    points: number;
+    matchedDestinationId: number | null;
+  }
+>();
+
+for (const r of sugRowsRes.rows as SugRow[]) {
+  const rawName = (r.name || '').trim();
+  if (!rawName) continue;
+  const rawCountry = r.country ? String(r.country).trim() : '';
+  const p = Number(r.priority) || 3;
+  const weight = weights[p] ?? 0.75;
+
+  const normName = normalize(rawName);
+  const normCountry = rawCountry ? normalize(rawCountry) : '';
+  const key = normName + '||' + normCountry;
+
+  let entry = sugMap.get(key);
+  if (!entry) {
+    const looseKey = normName + '||';
+    const matchedId =
+      destNameToId.get(key) ?? destNameToId.get(looseKey) ?? null;
+    entry = {
+      displayVariants: new Map([[rawName, 1]]),
+      country: rawCountry || null,
+      voters: 1,
+      points: weight,
+      matchedDestinationId: matchedId,
+    };
+    sugMap.set(key, entry);
+  } else {
+    entry.voters += 1;
+    entry.points += weight;
+    entry.displayVariants.set(
+      rawName,
+      (entry.displayVariants.get(rawName) || 0) + 1
+    );
+    if (!entry.country && rawCountry) entry.country = rawCountry;
+  }
+}
+
+const suggestionRanking = Array.from(sugMap.entries())
+  .map(([k, e]) => {
+    let best = '';
+    let bestCnt = 0;
+    for (const [nm, cnt] of e.displayVariants.entries()) {
+      if (cnt > bestCnt) {
+        best = nm;
+        bestCnt = cnt;
+      }
+    }
+    return {
+      name: best || k.split('||')[0],
+      country: e.country,
+      voters: e.voters,
+      points: Number(e.points.toFixed(3)),
+      matchedDestinationId: e.matchedDestinationId,
+    };
+  })
+  .sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    return b.voters - a.voters;
+  });
+
+// === Availability chart data and top-3 weekends ===
+// Weighted availability: yes*1 + maybe*0.9 + no*0
+const availWeights = { yes: 1, maybe: 0.9, no: 0 };
+
+const weekendsWithScores = weekendStats.map((w) => {
+  const yes = Number(w.yes_count || 0);
+  const maybe = Number(w.maybe_count || 0);
+  const no = Number(w.no_count || 0);
+  const score =
+    yes * availWeights.yes +
+    maybe * availWeights.maybe +
+    no * availWeights.no;
+  return { ...w, yes, maybe, no, score };
+});
+
+const topWeekends = weekendsWithScores
+  .slice()
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 3);
+
+// Datos precalculados para Chart.js
+const chartLabels = weekendsWithScores.map(
+  (w) =>
+    `${w.start_date.toLocaleDateString('es-ES', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    })} – ${w.end_date.toLocaleDateString('es-ES', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    })}`
+);
+
+const yesSeries = weekendsWithScores.map((w) => w.yes);
+const maybeSeries = weekendsWithScores.map((w) => w.maybe);
+const noSeries = weekendsWithScores.map((w) => -w.no);
 
 // Helpers
 function formatDate(d: Date) {
-  return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
+  return d.toLocaleDateString('es-ES', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+  });
 }
 function pct(count: number) {
   if (!totalParticipants || totalParticipants === 0) return 0;
@@ -190,9 +331,12 @@ function pct(count: number) {
     <meta charset="utf-8" />
     <title>Resultados del viaje: {trip.name}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
         --bg: #020617;
@@ -208,12 +352,19 @@ function pct(count: number) {
         --bad: #f97373;
       }
 
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
 
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: radial-gradient(circle at top left, #0f172a, #020617 55%);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont,
+          'Segoe UI', sans-serif;
+        background: radial-gradient(
+          circle at top left,
+          #0f172a,
+          #020617 55%
+        );
         color: var(--fg);
       }
 
@@ -250,18 +401,11 @@ function pct(count: number) {
         color: var(--accent-text);
         font-size: 0.75rem;
         text-transform: uppercase;
-        letter-spacing: .05em;
-      }
-
-      .top-actions {
-        display:flex;
-        flex-wrap:wrap;
-        gap:0.5rem;
-        margin-top:0.5rem;
+        letter-spacing: 0.05em;
       }
 
       a.btn-link {
-        text-decoration:none;
+        text-decoration: none;
       }
 
       .btn {
@@ -274,26 +418,21 @@ function pct(count: number) {
         align-items: center;
         justify-content: center;
         gap: 0.4rem;
-        font-size:0.85rem;
+        font-size: 0.85rem;
       }
       .btn-primary {
         background: linear-gradient(135deg, #f97316, #fb923c);
         color: #0b1120;
       }
-      .btn-ghost {
-        background: transparent;
-        border: 1px solid #1f2937;
-        color: var(--fg);
-      }
 
       .layout-grid {
-        display:grid;
-        grid-template-columns: minmax(0,1.1fr);
-        gap:1.25rem;
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr);
+        gap: 1.25rem;
       }
-      @media (min-width: 900px){
+      @media (min-width: 900px) {
         .layout-grid {
-          grid-template-columns: minmax(0,1.1fr) minmax(0,1fr);
+          grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
         }
       }
 
@@ -301,144 +440,174 @@ function pct(count: number) {
         border-radius: 1rem;
         border: 1px solid var(--card-border);
         padding: 1rem 1rem 1.2rem;
-        background: radial-gradient(circle at top left, rgba(148,163,184,0.18), transparent 55%);
+        background: radial-gradient(
+          circle at top left,
+          rgba(148, 163, 184, 0.18),
+          transparent 55%
+        );
         background-color: var(--card);
         box-shadow: 0 18px 40px rgba(15, 23, 42, 0.65);
       }
 
       .card h2 {
-        margin:0 0 0.6rem;
-        font-size:1.1rem;
+        margin: 0 0 0.6rem;
+        font-size: 1.1rem;
       }
       .card p {
-        margin:0;
-        font-size:0.9rem;
+        margin: 0;
+        font-size: 0.9rem;
       }
 
       .helper-text {
-        font-size:0.8rem;
-        color:var(--muted);
-        margin-top:0.15rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-top: 0.15rem;
       }
 
       .weekend-item {
-        margin-top:0.7rem;
-        padding:0.7rem 0.65rem;
-        border-radius:0.9rem;
-        border:1px solid #1f2937;
-        background:rgba(15,23,42,0.7);
+        margin-top: 0.7rem;
+        padding: 0.7rem 0.65rem;
+        border-radius: 0.9rem;
+        border: 1px solid #1f2937;
+        background: rgba(15, 23, 42, 0.7);
       }
 
       .weekend-header {
-        display:flex;
-        justify-content:space-between;
-        gap:0.5rem;
-        align-items:center;
-        margin-bottom:0.3rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.3rem;
       }
       .weekend-title {
-        font-size:0.95rem;
-        font-weight:600;
+        font-size: 0.95rem;
+        font-weight: 600;
       }
 
       .badge-small {
-        font-size:0.75rem;
-        padding:0.15rem 0.45rem;
-        border-radius:999px;
-        background:rgba(148,163,184,0.18);
-        color:var(--muted);
+        font-size: 0.75rem;
+        padding: 0.15rem 0.45rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.18);
+        color: var(--muted);
       }
 
       .availability-row {
-        display:flex;
-        flex-wrap:wrap;
-        gap:0.4rem;
-        font-size:0.8rem;
-        margin-top:0.35rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+        margin-top: 0.35rem;
       }
 
       .availability-pill {
-        padding:0.18rem 0.5rem;
-        border-radius:999px;
+        padding: 0.18rem 0.5rem;
+        border-radius: 999px;
       }
       .availability-pill.yes {
-        background:rgba(34,197,94,0.18);
-        color:var(--good);
+        background: rgba(34, 197, 94, 0.18);
+        color: var(--good);
       }
       .availability-pill.maybe {
-        background:rgba(234,179,8,0.18);
-        color:var(--maybe);
+        background: rgba(234, 179, 8, 0.18);
+        color: var(--maybe);
       }
       .availability-pill.no {
-        background:rgba(248,113,113,0.18);
-        color:var(--bad);
+        background: rgba(248, 113, 113, 0.18);
+        color: var(--bad);
       }
 
       .bar-row {
-        margin-top:0.4rem;
-        font-size:0.8rem;
+        margin-top: 0.4rem;
+        font-size: 0.8rem;
       }
       .bar-bg {
-        width:100%;
-        height:6px;
-        border-radius:999px;
-        background:#020617;
-        overflow:hidden;
-        margin-top:0.18rem;
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        background: #020617;
+        overflow: hidden;
+        margin-top: 0.18rem;
       }
       .bar-fill {
-        height:100%;
-        border-radius:999px;
-        background:linear-gradient(90deg,#22c55e,#facc15);
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #22c55e, #facc15);
       }
 
       .flight-summary {
-        margin-top:0.35rem;
-        font-size:0.8rem;
-        color:var(--muted);
+        margin-top: 0.35rem;
+        font-size: 0.8rem;
+        color: var(--muted);
       }
 
       .dest-item {
-        margin-top:0.6rem;
-        padding:0.6rem 0.5rem;
-        border-radius:0.8rem;
-        border:1px solid #1f2937;
-        background:rgba(15,23,42,0.7);
-        font-size:0.9rem;
+        margin-top: 0.6rem;
+        padding: 0.6rem 0.5rem;
+        border-radius: 0.8rem;
+        border: 1px solid #1f2937;
+        background: rgba(15, 23, 42, 0.7);
+        font-size: 0.9rem;
       }
       .dest-header {
-        display:flex;
-        justify-content:space-between;
-        gap:0.5rem;
-        align-items:flex-start;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        align-items: flex-start;
       }
       .dest-name {
-        font-weight:500;
+        font-weight: 500;
       }
       .dest-meta {
-        font-size:0.78rem;
-        color:var(--muted);
-        margin-top:0.15rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-top: 0.15rem;
       }
       .dest-score {
-        text-align:right;
-        font-size:0.8rem;
+        text-align: right;
+        font-size: 0.8rem;
       }
 
       .chip-small {
-        display:inline-flex;
-        align-items:center;
-        gap:0.25rem;
-        padding:0.1rem 0.45rem;
-        border-radius:999px;
-        background:rgba(15,23,42,0.8);
-        border:1px solid #1f2937;
-        font-size:0.75rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.1rem 0.45rem;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid #1f2937;
+        font-size: 0.75rem;
       }
 
       .suggestion-item {
-        font-size:0.86rem;
-        margin-top:0.4rem;
+        font-size: 0.86rem;
+        margin-top: 0.4rem;
+      }
+
+      .chart-container {
+        margin-top: 1rem;
+        height: 320px;
+      }
+
+      table.avail-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+        margin-top: 0.7rem;
+      }
+      table.avail-table th {
+        text-align: left;
+        padding: 0.3rem;
+        border-bottom: 1px solid #4b5563;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      table.avail-table td {
+        padding: 0.3rem;
+        border-bottom: 1px solid #1f2937;
+      }
+      table.avail-table tr:hover {
+        background: rgba(15, 23, 42, 0.8);
       }
     </style>
   </head>
@@ -451,29 +620,23 @@ function pct(count: number) {
           Origen: <strong>{trip.origin_city}</strong>
           {trip.origin_airport_code && <> ({trip.origin_airport_code})</>}
           <br />
-          {totalParticipants > 0
-            ? <>Participantes: <strong>{totalParticipants}</strong></>
-            : <>Aún no hay participantes registrados.</>
-          }
+          {totalParticipants > 0 ? (
+            <>Participantes: <strong>{totalParticipants}</strong></>
+          ) : (
+            <>Aún no hay participantes registrados.</>
+          )}
         </p>
-        <!--<div class="top-actions">
-          <a href={`/join/${trip.share_code}`} class="btn-link">
-            <button class="btn btn-ghost">⬅ Volver a mis votos</button>
-          </a>
-          <a href={`/trips/${trip.id}`} class="btn-link">
-            <button class="btn btn-ghost">Panel del organizador</button>
-          </a>
-        </div>-->
+
         {participant && (
           <p class="helper-text">
-            Estás viendo los resultados globales como <strong>{participant.display_name}</strong>.
+            Estás viendo los resultados globales como{' '}
+            <strong>{participant.display_name}</strong>.
           </p>
         )}
 
         <a href={`/join/${trip.share_code}`} class="btn-link">
-            <button class="btn btn-primary">Editar mi votación</button>
+          <button class="btn btn-primary">Editar mi votación</button>
         </a>
-
       </header>
 
       <main class="layout-grid">
@@ -481,77 +644,122 @@ function pct(count: number) {
         <section class="card">
           <h2>Fines de semana más viables</h2>
           <p class="helper-text">
-            Resumen de disponibilidad del grupo. Las barras indican el porcentaje de gente que puede ir
-            a cada finde (sólo “Puedo” cuenta como disponibilidad).
+            Resumen de disponibilidad del grupo. La gráfica muestra votos “Pueden” y “Quizás” a la
+            derecha y los “No” a la izquierda. Cada bloque representa 1 voto.
           </p>
 
           {weekendStats.length === 0 ? (
             <p style="margin-top:0.8rem;">Todavía no hay fines de semana definidos para este viaje.</p>
           ) : (
-            weekendStats.map((w) => {
+            <>
+              {/* Top-3 fines según yes+maybe (ponderado) */}
+              <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin:0.6rem 0 0.8rem;">
+                {topWeekends.map((w, i) => (
+                  <div class="chip-small" key={w.id}>
+                    <strong style="font-size:0.95rem;">
+                      #{i + 1} {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tabla de disponibilidad por finde */}
+              <table class="avail-table" data-weekends-table>
+                <thead>
+                  <tr>
+                    <th>Finde</th>
+                    <th style="text-align:center;">✅ Pueden</th>
+                    <th style="text-align:center;">🤔 Quizás</th>
+                    <th style="text-align:center;">❌ No</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekendsWithScores.map((w) => (
+                    <tr key={w.id}>
+                      <td>{formatDate(w.start_date)} – {formatDate(w.end_date)}</td>
+                      <td style="text-align:center;">{w.yes}</td>
+                      <td style="text-align:center;">{w.maybe}</td>
+                      <td style="text-align:center;">{w.no}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Gráfica horizontal (debajo de la tabla, sin scroll raro) */}
+              <div class="chart-container">
+                <canvas
+                  id="availabilityChart"
+                  data-labels={JSON.stringify(chartLabels)}
+                  data-yes={JSON.stringify(yesSeries)}
+                  data-maybe={JSON.stringify(maybeSeries)}
+                  data-no={JSON.stringify(noSeries)}
+                ></canvas>
+              </div>
+
+              <hr style="border:none; border-top:1px solid #1f2937; margin:1.1rem 0;" />
+
+              {/* Lista detallada de cada finde + vuelos */}
+              {weekendStats.map((w) => {
                 const yes = w.yes_count;
                 const maybe = w.maybe_count;
                 const no = w.no_count;
-
-                // Disponibilidad = sí + quizás
-                const availCount = yes + maybe;
-                const availPct   = pct(availCount);
-
+                const yPct = pct(yes + maybe); // cuenta sí + quizá
                 const totalVotes = w.total_votes;
 
                 const outbound = getMinPrice(w.id, 'outbound');
-                const ret      = getMinPrice(w.id, 'return');
+                const ret = getMinPrice(w.id, 'return');
 
                 return (
-                <div class="weekend-item">
-                  <div class="weekend-header">
-                    <div class="weekend-title">
-                      {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                  <div class="weekend-item">
+                    <div class="weekend-header">
+                      <div class="weekend-title">
+                        {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                      </div>
+                      <div class="badge-small">
+                        {totalVotes} voto{totalVotes === 1 ? '' : 's'}
+                      </div>
                     </div>
-                    <div class="badge-small">
-                      {totalVotes} voto{totalVotes === 1 ? '' : 's'}
+
+                    <div class="availability-row">
+                      <span class="availability-pill yes">
+                        ✅ Pueden: {yes} ({pct(yes)}%)
+                      </span>
+                      <span class="availability-pill maybe">
+                        🤔 Quizás: {maybe}
+                      </span>
+                      <span class="availability-pill no">
+                        ❌ No: {no}
+                      </span>
                     </div>
-                  </div>
 
-                  <div class="availability-row">
-                    <span class="availability-pill yes">
-                      ✅ Pueden: {yes} ({pct(yes)}%)
-                    </span>
-                    <span class="availability-pill maybe">
-                      🤔 Quizás: {maybe}
-                    </span>
-                    <span class="availability-pill no">
-                      ❌ No: {no}
-                    </span>
-                  </div>
-
-                  <div class="bar-row">
-                    <span>Disponibilidad global (Puedo + Quizás)</span>
-                    <div class="bar-bg">
+                    <div class="bar-row">
+                      <span>Disponibilidad global (“Puedo” + “Quizás”)</span>
+                      <div class="bar-bg">
                         <div
-                        class="bar-fill"
-                        style={`width:${availPct}%;`}
+                          class="bar-fill"
+                          style={`width:${yPct}%;`}
                         ></div>
+                      </div>
+                    </div>
+
+                    <div class="flight-summary">
+                      {outbound || ret ? (
+                        <>
+                          {outbound && (
+                            <>Ida desde <strong>{outbound.price} {outbound.currency}</strong>{' '}</>
+                          )}
+                          {ret && (
+                            <>· Vuelta desde <strong>{ret.price} {ret.currency}</strong></>
+                          )}
+                        </>
+                      ) : (
+                        <>Aún no hay precios cargados para este finde.</>
+                      )}
                     </div>
                   </div>
-
-                  <div class="flight-summary">
-                    {outbound || ret ? (
-                      <>
-                        {outbound && (
-                          <>Ida desde <strong>{outbound.price} {outbound.currency}</strong>{' '}</>
-                        )}
-                        {ret && (
-                          <>· Vuelta desde <strong>{ret.price} {ret.currency}</strong></>
-                        )}
-                      </>
-                    ) : (
-                      <>Aún no hay precios cargados para este finde.</>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </>
           )}
         </section>
 
@@ -559,31 +767,41 @@ function pct(count: number) {
         <section class="card">
           <h2>Destinos favoritos del grupo</h2>
           <p class="helper-text">
-            Ordenados por número de votos y prioridad media (1 = más alta).
+            Ordenados por número de votos y prioridad media (1 = más
+            alta). Los 3 primeros se usan para calcular los precios de vuelo.
           </p>
 
           {destStats.length === 0 ? (
-            <p style="margin-top:0.8rem;">Todavía no hay destinos definidos.</p>
+            <p style="margin-top: 0.8rem;">
+              Todavía no hay destinos definidos.
+            </p>
           ) : (
-            destStats.map((d) => (
+            destStats.map((d, index) => (
               <div class="dest-item">
                 <div class="dest-header">
                   <div>
                     <div class="dest-name">
+                      {index < 3 && <>🏆 </>}
                       {d.name}
                       {d.country && <> – {d.country}</>}
                     </div>
                     <div class="dest-meta">
-                      {d.votes_count > 0
-                        ? <>Votado por {d.votes_count} persona{d.votes_count === 1 ? '' : 's'}</>
-                        : <>Aún sin votos</>
-                      }
+                      {d.votes_count > 0 ? (
+                        <>
+                          Votado por {d.votes_count} persona
+                          {d.votes_count === 1 ? '' : 's'}
+                        </>
+                      ) : (
+                        <>Aún sin votos</>
+                      )}
                     </div>
                   </div>
                   <div class="dest-score">
                     {d.avg_priority !== null && d.votes_count > 0 ? (
                       <div class="chip-small">
-                        <span>⭐ Media #{d.avg_priority.toFixed(1)}</span>
+                        <span>
+                          ⭐ Media #{d.avg_priority.toFixed(1)}
+                        </span>
                       </div>
                     ) : (
                       <div class="chip-small">
@@ -596,23 +814,27 @@ function pct(count: number) {
             ))
           )}
 
-          <hr style="border:none; border-top:1px solid #1f2937; margin:1.1rem 0;" />
+          <hr
+            style="border:none; border-top:1px solid #1f2937; margin:1.1rem 0;"
+          />
 
           <h2>Sugerencias del grupo</h2>
           <p class="helper-text">
             Lugares que la gente ha propuesto (máx. 3 por persona).
           </p>
 
-          {suggestions.length === 0 ? (
-            <p style="margin-top:0.7rem;">Todavía no hay sugerencias de destinos.</p>
+          {suggestionRanking.length === 0 ? (
+            <p style="margin-top: 0.7rem;">
+              Todavía no hay sugerencias de destinos.
+            </p>
           ) : (
-            suggestions.map((s: any) => (
+            suggestionRanking.map((s: any) => (
               <div class="suggestion-item">
                 <strong>{s.name}</strong>
                 {s.country && <> – {s.country}</>}
                 {' · '}
-                <span style="color:var(--muted);">
-                  sugerido por {s.count} persona{s.count === 1 ? '' : 's'}
+                <span style="color: var(--muted);">
+                  sugerido por {s.voters} persona{s.voters === 1?'':'s'}
                 </span>
               </div>
             ))
@@ -620,5 +842,150 @@ function pct(count: number) {
         </section>
       </main>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module">
+      
+
+      const canvas = document.getElementById('availabilityChart');
+      if (canvas) {
+        const labels = JSON.parse(canvas.dataset.labels || '[]');
+        const yesData = JSON.parse(canvas.dataset.yes || '[]');
+        const maybeData = JSON.parse(canvas.dataset.maybe || '[]');
+        const noData = JSON.parse(canvas.dataset.no || '[]');
+
+        if (labels.length > 0) {
+          const ctx = canvas.getContext('2d');
+
+          const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: 'No',
+                  data: noData,
+                  backgroundColor: '#ef4444',
+                  borderColor: '#dc2626',
+                  borderWidth: 0,
+                  stack: 'a',
+                },
+                {
+                  label: 'Quizás',
+                  data: maybeData,
+                  backgroundColor: '#f59e0b',
+                  borderColor: '#d97706',
+                  borderWidth: 0,
+                  stack: 'a',
+                },
+                {
+                  label: 'Pueden',
+                  data: yesData,
+                  backgroundColor: '#10b981',
+                  borderColor: '#059669',
+                  borderWidth: 0,
+                  stack: 'a',
+                },
+              ],
+            },
+            options: {
+              indexAxis: 'y', // barras horizontales
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                x: {
+                  stacked: true,
+                  ticks: {
+                    callback: (value) => Math.abs(Number(value)), // quitar signo
+                    font: { size: 11, weight: '500' },
+                    color: '#94a3b8',
+                  },
+                  grid: {
+                    color: 'rgba(100, 116, 139, 0.1)',
+                    drawBorder: false,
+                  },
+                  beginAtZero: true,
+                },
+                y: {
+                  stacked: true,
+                  ticks: {
+                    font: { size: 12, weight: '500' },
+                    color: '#94a3b8',
+                  },
+                  grid: { display: false, drawBorder: false },
+                },
+              },
+              plugins: {
+                tooltip: {
+                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                  titleColor: '#f1f5f9',
+                  bodyColor: '#f1f5f9',
+                  borderColor: '#334155',
+                  borderWidth: 1,
+                  padding: 10,
+                  titleFont: { size: 12, weight: '600' },
+                  bodyFont: { size: 11, weight: '500' },
+                  callbacks: {
+                    label: (ctx) => {
+                      const v = ctx.raw;
+                      return `${ctx.dataset.label}: ${Math.abs(v)} personas`;
+                    },
+                  },
+                },
+                legend: {
+                  position: 'top',
+                  labels: {
+                    font: { size: 12, weight: '600' },
+                    color: '#f1f5f9',
+                    padding: 15,
+                    usePointStyle: true,
+                    pointStyle: 'circle',
+                  },
+                },
+              },
+            },
+          });
+
+          // Click en la gráfica → resalta fila de la tabla
+          const rows = document.querySelectorAll('[data-weekends-table] tbody tr');
+          canvas.addEventListener('click', (evt) => {
+            const points = chart.getElementsAtEventForMode(
+              evt,
+              'nearest',
+              { intersect: true },
+              true
+            );
+            if (points.length === 0) return;
+
+            const index = points[0].index;
+            if (index < rows.length) {
+              const row = rows[index];
+              row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              const oldBg = row.style.backgroundColor;
+              row.style.backgroundColor = 'rgba(249, 115, 22, 0.18)';
+              setTimeout(() => {
+                row.style.backgroundColor = oldBg;
+              }, 600);
+            }
+          });
+
+          // Hover / click en filas de tabla
+          rows.forEach((row) => {
+            row.addEventListener('click', () => {
+              const oldBg = row.style.backgroundColor;
+              row.style.backgroundColor = 'rgba(249, 115, 22, 0.18)';
+              setTimeout(() => {
+                row.style.backgroundColor = oldBg;
+              }, 600);
+            });
+            row.addEventListener('mouseenter', () => {
+              row.style.opacity = '0.7';
+            });
+            row.addEventListener('mouseleave', () => {
+              row.style.opacity = '1';
+            });
+          });
+        }
+      }
+    </script>
   </body>
 </html>

@@ -2,6 +2,7 @@
 import type { APIRoute } from 'astro';
 import { pool } from '../../../../lib/db';
 import { fetchTop3FlightsForDate } from '../../../../lib/flights';
+import { guessAirportCodeFromCity } from '../../../../lib/airports';
 
 export const prerender = false;
 
@@ -40,11 +41,55 @@ export const POST: APIRoute = async ({ params }) => {
   const currency: string = trip.currency || 'EUR';
 
   // 2) Cargar destinos y findes
-  const destRes = await pool.query(
-    'SELECT id, airport_code FROM destinations WHERE trip_id = $1',
+  // Preferir los top-3 destinos votados (destination_rankings). Si existen, los usaremos
+  // como los 3 destinos principales para las llamadas a la API de vuelos.
+  const topDestRes = await pool.query(
+    `
+    SELECT
+      r.destination_id,
+      COUNT(*)::int AS votes_count,
+      AVG(r.priority)::float AS avg_priority
+    FROM destination_rankings r
+    WHERE r.trip_id = $1
+    GROUP BY r.destination_id
+    ORDER BY votes_count DESC, avg_priority ASC NULLS LAST
+    LIMIT 3
+    `,
     [tripId]
   );
-  const destinations = destRes.rows as { id: number; airport_code: string | null }[];
+
+  let destinations: { id: number; airport_code: string | null; name: string; country: string | null }[] = [];
+
+  if (topDestRes.rowCount > 0) {
+    const topIds = topDestRes.rows.map((r: any) => Number(r.destination_id));
+    const dRes = await pool.query(
+      'SELECT id, airport_code, name, country FROM destinations WHERE id = ANY($1::int[])',
+      [topIds]
+    );
+    destinations = dRes.rows as { id: number; airport_code: string | null; name: string; country: string | null }[];
+  }
+
+  // Si no hay top-3 votados, fallback a todos los destinos definidos
+  if (destinations.length === 0) {
+    const destRes = await pool.query(
+      'SELECT id, airport_code, name, country FROM destinations WHERE trip_id = $1',
+      [tripId]
+    );
+    destinations = destRes.rows as { id: number; airport_code: string | null; name: string; country: string | null }[];
+  }
+
+  // Auto-resolve airport codes for destinations that don't have them
+  for (const dest of destinations) {
+    if (!dest.airport_code && dest.name) {
+      const resolved = guessAirportCodeFromCity(dest.name, dest.country || undefined);
+      if (resolved) {
+        dest.airport_code = resolved;
+        console.log(`✓ Resolved airport code for ${dest.name}: ${resolved}`);
+      } else {
+        console.warn(`✗ Could not resolve airport code for ${dest.name} (${dest.country})`);
+      }
+    }
+  }
 
   const weekendsRes = await pool.query(
     'SELECT id, start_date, end_date FROM weekends WHERE trip_id = $1 ORDER BY start_date',

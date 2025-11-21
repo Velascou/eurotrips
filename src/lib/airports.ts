@@ -15,7 +15,7 @@ import codigos from '../assets/codigos_IATA.json';
 const records = codigos as CityRecord[];
 
 // Normaliza cadenas: quita acentos, pasa a minúsculas, recorta espacios
-function normalize(str: string): string {
+export function normalize(str: string): string {
   return str
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '') // quita tildes

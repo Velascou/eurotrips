@@ -2,8 +2,8 @@
 export const prerender = false;
 
 import { pool } from '../../lib/db';
+import { normalize } from '../../lib/airports';
 import '../../styles/global.css';
-
 
 const idParam = Astro.params.id;
 const tripId = Number(idParam);
@@ -37,7 +37,7 @@ const weekendsRes = await pool.query(
 );
 const weekends = weekendsRes.rows;
 
-// 4) Cargar vuelos (si ya hay algo en flight_day_options)
+// 4) Cargar vuelos
 const flightsRes = await pool.query(
   `SELECT
      id,
@@ -61,11 +61,9 @@ const flightsRes = await pool.query(
    ORDER BY destination_id, weekend_id, direction, flight_date, option_rank`,
   [tripId]
 );
-
 const flights = flightsRes.rows;
 
 // 5) Participantes
-// debajo de donde cargas trip/destinations/weekends...
 const participantsRes = await pool.query(
   `SELECT id, display_name, email, created_at
    FROM participants
@@ -74,7 +72,6 @@ const participantsRes = await pool.query(
   [tripId]
 );
 const participants = participantsRes.rows;
-
 
 // 6) Resumen de disponibilidad por finde
 const weekendStatsRes = await pool.query(
@@ -98,6 +95,37 @@ const weekendStatsRes = await pool.query(
 );
 const weekendStats = weekendStatsRes.rows;
 
+// === Datos para gráfica y ranking de findes ===
+const availWeights = { yes: 1, maybe: 0.9, no: 0 };
+
+const weekendsWithScores = (weekendStats as any[]).map((w: any) => {
+  const yes = Number(w.yes_count ?? 0);
+  const maybe = Number(w.maybe_count ?? 0);
+  const no = Number(w.no_count ?? 0);
+  const score = yes * availWeights.yes + maybe * availWeights.maybe + no * availWeights.no;
+  return { ...w, yes, maybe, no, score };
+});
+
+const topWeekends = weekendsWithScores
+  .slice()
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 3);
+
+const chartLabels = weekendsWithScores.map((w) =>
+  `${(w.start_date as Date).toLocaleDateString('es-ES', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+  })} – ${(w.end_date as Date).toLocaleDateString('es-ES', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+  })}`
+);
+const yesSeries = weekendsWithScores.map((w) => w.yes);
+const maybeSeries = weekendsWithScores.map((w) => w.maybe);
+const noSeries = weekendsWithScores.map((w) => -w.no); // No → lado izquierdo
+
 // 7) Resumen de ranking de destinos
 const destStatsRes = await pool.query(
   `
@@ -119,13 +147,92 @@ const destStatsRes = await pool.query(
 );
 const destinationStats = destStatsRes.rows;
 
-// Agrupar vuelos por destino + finde + dirección + día
+// 8) Ranking generado desde las sugerencias de los participantes
+const suggestionRowsRes = await pool.query(
+  `SELECT name, country, priority FROM participant_destination_suggestions WHERE trip_id = $1`,
+  [tripId]
+);
+type SugRow = { name: string; country: string | null; priority: number };
+const weights: Record<number, number> = { 1: 1.0, 2: 0.9, 3: 0.75 };
+
+const sugMap = new Map<string, {
+  keyName: string;
+  displayVariants: Map<string, number>;
+  country: string | null;
+  voters: number;
+  points: number;
+  matchedDestinationId: number | null;
+}>();
+
+// lookup destinos normalizados
+const destNameToId = new Map<string, number>();
+for (const d of destinations) {
+  const k = normalize(d.name || '');
+  destNameToId.set(k + '||' + normalize(d.country || ''), d.id);
+  destNameToId.set(k + '||', d.id);
+}
+
+for (const r of suggestionRowsRes.rows as SugRow[]) {
+  const rawName = (r.name || '').trim();
+  if (!rawName) continue;
+  const rawCountry = r.country ? String(r.country).trim() : '';
+  const p = Number(r.priority) || 3;
+  const weight = weights[p] ?? 0.75;
+
+  const normName = normalize(rawName);
+  const normCountry = rawCountry ? normalize(rawCountry) : '';
+  const key = normName + '||' + normCountry;
+
+  let entry = sugMap.get(key);
+  if (!entry) {
+    const looseKey = normName + '||';
+    const matchedId = destNameToId.get(key) ?? destNameToId.get(looseKey) ?? null;
+
+    entry = {
+      keyName: rawName,
+      displayVariants: new Map([[rawName, 1]]),
+      country: rawCountry || null,
+      voters: 1,
+      points: weight,
+      matchedDestinationId: matchedId ?? null,
+    };
+    sugMap.set(key, entry);
+  } else {
+    entry.voters += 1;
+    entry.points += weight;
+    entry.displayVariants.set(rawName, (entry.displayVariants.get(rawName) || 0) + 1);
+    if (!entry.country && rawCountry) entry.country = rawCountry;
+  }
+}
+
+const suggestionRanking = Array.from(sugMap.values()).map((e) => {
+  let bestName = e.keyName;
+  let maxCount = 0;
+  for (const [name, cnt] of e.displayVariants.entries()) {
+    if (cnt > maxCount) {
+      bestName = name;
+      maxCount = cnt;
+    }
+  }
+  return {
+    name: bestName,
+    country: e.country,
+    voters: e.voters,
+    points: Number(e.points.toFixed(3)),
+    matchedDestinationId: e.matchedDestinationId,
+  };
+}).sort((a, b) => {
+  if (b.points !== a.points) return b.points - a.points;
+  return b.voters - a.voters;
+});
+
+// 9) Agrupar vuelos por destino + finde + dirección + día
 type FlightGroupKey = string;
 type FlightRow = (typeof flights)[number];
 
 const groupedFlights = new Map<FlightGroupKey, FlightRow[]>();
 
-for (const f of flights) {
+for (const f of flights as any[]) {
   const key = `${f.destination_id}|${f.weekend_id}|${f.direction}|${f.flight_date.toISOString().slice(0,10)}`;
   if (!groupedFlights.has(key)) {
     groupedFlights.set(key, []);
@@ -133,7 +240,6 @@ for (const f of flights) {
   groupedFlights.get(key)!.push(f);
 }
 
-// Helper para encontrar vuelos para un destino+finde+direction+date
 function getFlightsFor(destId: number, weekendId: number, direction: string, dateStr: string): FlightRow[] {
   const key = `${destId}|${weekendId}|${direction}|${dateStr}`;
   return groupedFlights.get(key) ?? [];
@@ -141,6 +247,12 @@ function getFlightsFor(destId: number, weekendId: number, direction: string, dat
 
 function formatDate(d: Date) {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+
+function formatTimeEs(t: any) {
+  if (!t) return '';
+  const s = String(t);
+  return s.slice(0, 5);
 }
 
 // ==== Helpers para sugerencias rápidas de fines de semana ====
@@ -158,42 +270,30 @@ function getNextFriday(from = new Date()): Date {
   const d = new Date(from);
   const day = d.getDay(); // 0=domingo, 1=lunes,...,5=viernes
   const diff = (5 - day + 7) % 7;
-  // si hoy ya es viernes, saltar al siguiente para no meter el mismo finde
   return addDays(d, diff === 0 ? 7 : diff);
 }
 
-// Evitar sugerir findes que ya existen en la BD
+// Evitar sugerir findes ya en BD
 const existingStarts = new Set(
-  weekends.map((w: any) =>
+  (weekends as any[]).map((w) =>
     w.start_date instanceof Date ? toYMD(w.start_date) : String(w.start_date).slice(0, 10)
   )
 );
 
-function formatTimeEs(t: any) {
-  if (!t) return '';
-  const s = String(t);        // suele venir 'HH:MM:SS'
-  return s.slice(0, 5);       // 'HH:MM' 24h
-}
-
-// Próximos 30 findes (viernes-domingo), excluyendo los ya guardados
+// Próximos 30 findes (viernes-domingo), excluyendo los ya guardados y saltando 10 primeros
 const suggestedWeekends = (() => {
   const list: { start: string; end: string }[] = [];
-
-  // 1) Viernes base
   let currentFriday = getNextFriday();
 
-  // 2) Saltar los 10 primeros findes (demasiado cercanos)
   const SKIP = 10;
   for (let i = 0; i < SKIP; i++) {
     currentFriday = addDays(currentFriday, 7);
   }
 
-  // 3) A partir de ahí, generar 30 sugerencias
   const COUNT = 30;
-
   for (let i = 0; i < COUNT; i++) {
     const start = currentFriday;
-    const end = addDays(start, 2); // domingo
+    const end = addDays(start, 2);
     const startStr = toYMD(start);
     const endStr = toYMD(end);
 
@@ -206,450 +306,882 @@ const suggestedWeekends = (() => {
 
   return list;
 })();
+
 ---
 
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Viaje: {trip.name}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #020617;
+        --card: #020617;
+        --card-border: #1e293b;
+        --accent: #f97316;
+        --accent-soft: rgba(249, 115, 22, 0.12);
+        --accent-text: #fed7aa;
+        --fg: #e5e7eb;
+        --muted: #9ca3af;
+        --good: #10b981;
+        --maybe: #f59e0b;
+        --bad: #ef4444;
+      }
 
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, #0f172a, #020617 55%);
+        color: var(--fg);
+      }
+
+      .shell {
+        min-height: 100vh;
+        padding: 1.5rem 1rem 3rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      header.page-header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        margin-bottom: 1.5rem;
+      }
+      header.page-header h1 {
+        font-size: 1.6rem;
+        margin: 0;
+        color: var(--fg);
+      }
+      header.page-header p {
+        margin: 0.3rem 0;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+      header.page-header a { color: var(--accent); text-decoration: none; }
+      header.page-header a:hover { text-decoration: underline; }
+
+      .chip {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-text);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        margin-bottom: 0.5rem;
+      }
+
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.25rem;
+      }
+      @media (min-width: 900px) {
+        .dashboard-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 1200px) {
+        .dashboard-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      .card {
+        border-radius: 1rem;
+        border: 1px solid var(--card-border);
+        padding: 1rem 1rem 1.1rem;
+        background: radial-gradient(circle at top left, rgba(148,163,184,0.18), transparent 55%);
+        background-color: var(--card);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.65);
+      }
+
+      .card-span-2 {
+        grid-column: span 2;
+      }
+      @media (max-width: 899px) {
+        .card-span-2 {
+          grid-column: span 1;
+        }
+      }
+
+      .card-header {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:0.75rem;
+      }
+      .card-header h2 {
+        margin:0;
+        font-size:1.1rem;
+        color: var(--fg);
+      }
+
+      .card-body {
+        margin-top:0.75rem;
+        font-size:0.9rem;
+      }
+
+      .card[data-collapsed="true"] .card-body {
+        display:none;
+      }
+
+      .toggle-btn {
+        border-radius:999px;
+        border:1px solid #1f2937;
+        background:#020617;
+        color:var(--muted);
+        padding:0.25rem 0.7rem;
+        font-size:0.78rem;
+        cursor:pointer;
+      }
+      .toggle-btn:hover { border-color:#4b5563; color:#e5e7eb; }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        margin-top: 0.6rem;
+      }
+      th {
+        text-align: left;
+        padding: 0.4rem;
+        border-bottom: 1px solid #4b5563;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      td {
+        padding: 0.4rem;
+        border-bottom: 1px solid #1f2937;
+        color: var(--fg);
+      }
+      tr:hover { background: rgba(15, 23, 42, 0.7); }
+
+      ul { list-style: none; padding: 0; margin: 0.5rem 0; }
+      li { margin: 0.35rem 0; color: var(--fg); }
+
+      label { display:block; font-size:0.85rem; margin-top:0.4rem; color:var(--fg); }
+      input {
+        width:100%;
+        padding:0.35rem 0.45rem;
+        border-radius:0.4rem;
+        border:1px solid #1f2937;
+        background:#0f172a;
+        color:var(--fg);
+        font-size:0.9rem;
+      }
+      input:focus { outline:none; border-color:var(--accent); }
+
+      button.primary {
+        padding:0.4rem 0.8rem;
+        border-radius:0.5rem;
+        border:1px solid var(--accent);
+        background:var(--accent);
+        color:#0b1120;
+        cursor:pointer;
+        font-weight:600;
+        font-size:0.9rem;
+      }
+      button.primary:hover { opacity:0.9; }
+
+      code {
+        background: rgba(15, 23, 42, 0.7);
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.3rem;
+        color: var(--accent);
+        font-size: 0.85rem;
+      }
+
+      .chip-pill {
+        display:inline-flex;
+        align-items:center;
+        gap:0.25rem;
+        padding:0.1rem 0.45rem;
+        border-radius:999px;
+        background:rgba(15,23,42,0.8);
+        border:1px solid #1f2937;
+        font-size:0.75rem;
+      }
+
+      .chart-container {
+        margin-top:0.8rem;
+        height:300px;
+      }
+
+      .helper-text {
+        font-size:0.8rem;
+        color:var(--muted);
+        margin-top:0.15rem;
+      }
+
+      .flex-row {
+        display:flex;
+        flex-wrap:wrap;
+        gap:0.4rem;
+      }
+
+      .pill-yes {
+        padding:0.18rem 0.5rem;
+        border-radius:999px;
+        background:rgba(34,197,94,0.18);
+        color:var(--good);
+        font-size:0.8rem;
+      }
+      .pill-maybe {
+        padding:0.18rem 0.5rem;
+        border-radius:999px;
+        background:rgba(234,179,8,0.18);
+        color:var(--maybe);
+        font-size:0.8rem;
+      }
+      .pill-no {
+        padding:0.18rem 0.5rem;
+        border-radius:999px;
+        background:rgba(248,113,113,0.18);
+        color:var(--bad);
+        font-size:0.8rem;
+      }
+
+      .suggested-chips {
+        display:flex;
+        flex-wrap:wrap;
+        gap:0.4rem;
+        margin:0.6rem 0 1rem;
+      }
+      .suggested-chips button {
+        padding:0.3rem 0.6rem;
+        border-radius:999px;
+        border:1px solid #4b5563;
+        background:#020617;
+        color:var(--fg);
+        font-size:0.8rem;
+        cursor:pointer;
+      }
+      .suggested-chips button:hover { border-color:var(--accent); color:var(--accent-text); }
+
+      .weekend-list li {
+        display:flex;
+        align-items:center;
+        gap:0.4rem;
+        justify-content:space-between;
+      }
+
+      .danger-link {
+        border:none;
+        background:none;
+        color:#f97373;
+        cursor:pointer;
+        font-size:0.82rem;
+      }
+    </style>
   </head>
-  <body style="font-family: system-ui; max-width: 1000px; margin: 2rem auto; line-height: 1.5;">
-    <a href="/trips" style="text-decoration:none;">⬅ Volver a la lista</a>
+  <body>
+    <div class="shell" data-trip-root data-trip-id={trip.id}>
+      <header class="page-header">
+        <a href="/trips">⬅ Volver a la lista</a>
+        <div class="chip">Panel del viaje</div>
+        <h1>{trip.name}</h1>
+        <p>
+          Origen:
+          <strong>
+            {trip.origin_city}
+            {trip.origin_airport_code && <> ({trip.origin_airport_code})</>}
+          </strong>
+          <br />
+          Moneda: <strong>{trip.currency}</strong>
+          <br />
+          Creado: {new Date(trip.created_at).toLocaleString('es-ES')}
+          <br />
+          Enlace para compartir con tus amigos:<br />
+          <code>/join/{trip.share_code}</code>
+        </p>
+      </header>
 
-    <h1 style="margin-top: 1rem;">{trip.name}</h1>
-    <p>
-      Origen:
-      <strong>
-        {trip.origin_city}
-        {trip.origin_airport_code && <> ({trip.origin_airport_code})</>}
-      </strong>
-      <br />
-      Moneda: <strong>{trip.currency}</strong>
-      <br />
-      Creado: {new Date(trip.created_at).toLocaleString('es-ES')}
-      <br />
-      Enlace para compartir con tus amigos:<br />
-      <code>/join/{trip.share_code}</code>
-    </p>
+      <main class="dashboard-grid">
+        {/* DESTINOS */}
+        <section class="card" data-section="destinos" data-collapsed="false">
+          <div class="card-header">
+            <h2>Destinos</h2>
+            <button type="button" class="toggle-btn" data-toggle>Ocultar</button>
+          </div>
+          <div class="card-body">
+            {destinations.length === 0 ? (
+              <p>Aún no hay destinos para este viaje.</p>
+            ) : (
+              <ul>
+                {destinations.map((d) => (
+                  <li>
+                    <span>
+                      <strong>{d.name}</strong>
+                      {d.country && <> – {d.country}</>}
+                      {d.airport_code && <> ({d.airport_code})</>}
+                    </span>
+                    <form method="POST" action="/api/destinations/delete" style="display:inline;">
+                      <input type="hidden" name="tripId" value={trip.id} />
+                      <input type="hidden" name="destinationId" value={d.id} />
+                      <button type="submit" class="danger-link">eliminar</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-        <!-- Sección: añadir destinos -->
-    <section style="margin-top: 2rem;">
-      <h2>Destinos</h2>
-
-      {destinations.length === 0 ? (
-        <p>Aún no hay destinos para este viaje.</p>
-      ) : (
-        <ul>
-          {destinations.map((d) => (
-            <li key={d.id}>
-              <strong>{d.name}</strong>
-              {d.country && <> – {d.country}</>}
-              {d.airport_code && <> ({d.airport_code})</>}
-              {/* Botón eliminar destino */}
-              <form
-                method="POST"
-                action="/api/destinations/delete"
-                style="display:inline; margin-left:0.5rem;"
-              >
-                <input type="hidden" name="tripId" value={trip.id} />
-                <input type="hidden" name="destinationId" value={d.id} />
-                <button
-                  type="submit"
-                  style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
-                >
-                  eliminar
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3>Añadir destino</h3>
-      <form method="POST" action="/api/destinations" style="display:grid; gap:0.5rem; max-width:400px;">
-        <input type="hidden" name="tripId" value={trip.id} />
-        <label>
-          Nombre de la ciudad<br />
-          <input name="name" required style="width:100%; padding:0.3rem;" />
-        </label>
-        <label>
-          País<br />
-          <input name="country" style="width:100%; padding:0.3rem;" />
-        </label>
-        <label>
-          Código de aeropuerto (IATA, ej: FCO, BUD) – opcional<br />
-          <input name="airportCode" style="width:100%; padding:0.3rem;" />
-        </label>
-        <button type="submit" style="margin-top:0.5rem; padding:0.4rem 0.8rem;">
-          Guardar destino
-        </button>
-      </form>
-    </section>
-
-
-    <!-- Sección: fines de semana -->
-    <section style="margin-top: 2rem;">
-      <h2>Fines de semana</h2>
-
-      {weekends.length === 0 ? (
-        <p>Aún no hay fines de semana definidos.</p>
-      ) : (
-        <ul data-weekends-list>
-          {weekends.map((w) => (
-            <li
-              key={w.id}
-              data-weekend-id={w.id}
-              data-weekend-start={w.start_date.toISOString().slice(0, 10)}
-              data-weekend-end={w.end_date.toISOString().slice(0, 10)}
-              data-weekend-label={`${formatDate(w.start_date)} - ${formatDate(w.end_date)}`}
-            >
-              <strong>{formatDate(w.start_date)} - {formatDate(w.end_date)}</strong>
-              <!-- Botón eliminar finde -->
-              <form
-                method="POST"
-                action="/api/weekends/delete"
-                data-role="delete-weekend"
-                style="display:inline; margin-left:0.5rem;"
-              >
-                <input type="hidden" name="tripId" value={trip.id} />
-                <input type="hidden" name="weekendId" value={w.id} />
-                <button
-                  type="submit"
-                  style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
-                >
-                  eliminar
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3>Sugerencias rápidas (próximos findes)</h3>
-      <div
-        data-suggested-container
-        style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;"
-      >
-        {suggestedWeekends.map((sw) => {
-          const label = `${formatDate(new Date(sw.start))} – ${formatDate(new Date(sw.end))}`;
-          return (
-            <form
-              method="POST"
-              action="/api/weekends"
-              data-role="suggested-weekend"
-              data-start={sw.start}
-              data-end={sw.end}
-              data-label={label}
-              style="margin:0;"
-            >
+            <h3 style="margin-top:1rem; font-size:1rem;">Añadir destino</h3>
+            <form method="POST" action="/api/destinations" style="max-width:420px;">
               <input type="hidden" name="tripId" value={trip.id} />
-              <input type="hidden" name="startDate" value={sw.start} />
-              <input type="hidden" name="endDate" value={sw.end} />
-              <button
-                type="submit"
-                style="padding:0.3rem 0.6rem; border-radius:999px; border:1px solid #ccc; background:#f9f9f9; cursor:pointer;"
-              >
-                {label}
+              <label>
+                Nombre de la ciudad
+                <input name="name" required />
+              </label>
+              <label>
+                País
+                <input name="country" />
+              </label>
+              <label>
+                Código de aeropuerto (IATA, ej: FCO, BUD) – opcional
+                <input name="airportCode" />
+              </label>
+              <button type="submit" class="primary" style="margin-top:0.6rem;">
+                Guardar destino
               </button>
             </form>
-          );
-        })}
-      </div>
+          </div>
+        </section>
 
-      <h3>Añadir fin de semana manualmente</h3>
-      <form method="POST" action="/api/weekends" style="display:grid; gap:0.5rem; max-width:400px;">
-        <input type="hidden" name="tripId" value={trip.id} />
-        <label>
-          Fecha de inicio (viernes)<br />
-          <input type="date" name="startDate" required style="width:100%; padding:0.3rem;" />
-        </label>
-        <label>
-          Fecha de fin (domingo)<br />
-          <input type="date" name="endDate" required style="width:100%; padding:0.3rem;" />
-        </label>
-        <button type="submit" style="margin-top:0.5rem; padding:0.4rem 0.8rem;">
-          Guardar fin de semana
-        </button>
-      </form>
-    </section>
+        {/* VIAJEROS */}
+        <section class="card" data-section="viajeros" data-collapsed="false">
+          <div class="card-header">
+            <h2>Viajeros</h2>
+            <button type="button" class="toggle-btn" data-toggle>Ocultar</button>
+          </div>
+          <div class="card-body">
+            {participants.length === 0 ? (
+              <p>Aún no hay viajeros definidos para este viaje.</p>
+            ) : (
+              <ul>
+                {participants.map((p) => (
+                  <li>
+                    <span>
+                      <strong>{p.display_name}</strong>
+                      {p.email && <> – {p.email}</>}
+                      <span style="color:#9ca3af; font-size:0.8rem;">
+                        {' '}({new Date(p.created_at).toLocaleString('es-ES')})
+                      </span>
+                    </span>
+                    <form method="POST" action="/api/participants/delete" style="display:inline;">
+                      <input type="hidden" name="tripId" value={trip.id} />
+                      <input type="hidden" name="participantId" value={p.id} />
+                      <button type="submit" class="danger-link">eliminar</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-    <!-- Botón para refrescar vuelos -->
-    <section style="margin-top: 2rem;">
-      <h2>Vuelos</h2>
-      <form method="POST" action={`/api/trips/${trip.id}/refresh-flights`}>
-        <button type="submit" style="padding:0.5rem 1rem;">
-          Actualizar vuelos (API)
-        </button>
-      </form>
+            <h3 style="margin-top:1rem; font-size:1rem;">Añadir viajero</h3>
+            <form method="POST" action="/api/participants" style="max-width:420px;">
+              <input type="hidden" name="tripId" value={trip.id} />
+              <label>
+                Nombre
+                <input name="displayName" required />
+              </label>
+              <label>
+                Email (opcional)
+                <input name="email" type="email" />
+              </label>
+              <button type="submit" class="primary" style="margin-top:0.6rem;">
+                Guardar viajero
+              </button>
+            </form>
+          </div>
+        </section>
 
-      {destinations.length === 0 || weekends.length === 0 ? (
-        <p style="margin-top:1rem;">
-          Añade al menos un destino y un fin de semana para ver opciones de vuelo.
-        </p>
-      ) : flights.length === 0 ? (
-        <p style="margin-top:1rem;">
-          Aún no hay datos de vuelos guardados. Pulsa en "Actualizar vuelos" cuando tengas la API configurada.
-        </p>
-      ) : (
-        <>
-          {destinations.map((d) => (
-            <div key={d.id} style="margin-top:1.5rem; padding:1rem; border:1px solid #ddd; border-radius:8px;">
-              <h3 style="margin-top:0;">
-                {d.name}
-                {d.airport_code && <> ({d.airport_code})</>}
-              </h3>
+        {/* FINES DE SEMANA (gestión) */}
+        <section class="card card-span-2" data-section="weekends" data-collapsed="false">
+          <div class="card-header">
+            <h2>Fines de semana</h2>
+            <button type="button" class="toggle-btn" data-toggle>Ocultar</button>
+          </div>
+          <div class="card-body">
+            {weekends.length === 0 ? (
+              <p>Aún no hay fines de semana definidos.</p>
+            ) : (
+              <ul class="weekend-list" data-weekends-list>
+                {weekends.map((w) => (
+                  <li
+                    data-weekend-id={w.id}
+                    data-weekend-start={w.start_date.toISOString().slice(0, 10)}
+                    data-weekend-end={w.end_date.toISOString().slice(0, 10)}
+                    data-weekend-label={`${formatDate(w.start_date)} - ${formatDate(w.end_date)}`}
+                  >
+                    <span><strong>{formatDate(w.start_date)} - {formatDate(w.end_date)}</strong></span>
+                    <form
+                      method="POST"
+                      action="/api/weekends/delete"
+                      data-role="delete-weekend"
+                    >
+                      <input type="hidden" name="tripId" value={trip.id} />
+                      <input type="hidden" name="weekendId" value={w.id} />
+                      <button type="submit" class="danger-link">eliminar</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-              {weekends.map((w) => {
-                const outboundDates = [
-                  new Date(w.start_date.getTime() - 2 * 24*60*60*1000),
-                  new Date(w.start_date.getTime() - 1 * 24*60*60*1000),
-                  w.start_date,
-                  new Date(w.start_date.getTime() + 1 * 24*60*60*1000),
-                ];
-                const returnDates = [
-                  w.end_date,
-                  new Date(w.end_date.getTime() + 1 * 24*60*60*1000),
-                  new Date(w.end_date.getTime() + 2 * 24*60*60*1000),
-                  new Date(w.end_date.getTime() + 3 * 24*60*60*1000),
-                ];
-
+            <h3 style="margin-top:1.2rem; font-size:1rem;">Sugerencias rápidas (próximos findes)</h3>
+            <div class="helper-text">
+              Haz clic en una opción para añadir ese fin de semana directamente a la lista.
+            </div>
+            <div class="suggested-chips" data-suggested-container>
+              {suggestedWeekends.map((sw) => {
+                const label = `${formatDate(new Date(sw.start))} – ${formatDate(new Date(sw.end))}`;
                 return (
-                  <div key={w.id} style="margin-top:1rem;">
-                    <h4>
-                      Finde: {formatDate(w.start_date)} - {formatDate(w.end_date)}
-                    </h4>
-
-                    <div style="display:flex; gap:2rem; flex-wrap:wrap;">
-                      <div>
-                        <strong>Ida</strong>
-                        <ul>
-                          {outboundDates.map((dDate) => {
-                            const dateStr = dDate.toISOString().slice(0,10);
-                            const dayFlights = getFlightsFor(d.id, w.id, 'outbound', dateStr);
-                            const minPrice = dayFlights[0]?.price_per_person;
-
-                            return (
-                              <li key={'out-'+dateStr}>
-                                {formatDate(dDate)}{' '}
-                                {dayFlights.length === 0 ? (
-                                  <>– sin datos</>
-                                ) : (
-                                  <>
-                                    – desde {minPrice} {dayFlights[0].currency}
-                                    <ul>
-                                      {dayFlights.map((f) => (
-                                        <li key={f.id}>
-                                          {f.airline || f.carrier_code || 'Vuelo'}
-                                          {f.flight_number && <> {f.flight_number}</>}:{' '}
-                                          {formatTimeEs(f.departure_time)} → {formatTimeEs(f.arrival_time)} ·{' '}
-                                          {f.price_per_person} {f.currency}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-
-                      <div>
-                        <strong>Vuelta</strong>
-                        <ul>
-                          {returnDates.map((dDate) => {
-                            const dateStr = dDate.toISOString().slice(0,10);
-                            const dayFlights = getFlightsFor(d.id, w.id, 'return', dateStr);
-                            const minPrice = dayFlights[0]?.price_per_person;
-
-                            return (
-                              <li key={'ret-'+dateStr}>
-                                {formatDate(dDate)}{' '}
-                                {dayFlights.length === 0 ? (
-                                  <>– sin datos</>
-                                ) : (
-                                  <>
-                                    – desde {minPrice} {dayFlights[0].currency}
-                                    <ul>
-                                      {dayFlights.map((f) => (
-                                        <li key={f.id}>
-                                          {f.airline || f.carrier_code || 'Vuelo'}
-                                          {f.flight_number && <> {f.flight_number}</>}:{' '}
-                                          {formatTimeEs(f.departure_time)} → {formatTimeEs(f.arrival_time)} ·{' '}
-                                          {f.price_per_person} {f.currency}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
+                  <form
+                    method="POST"
+                    action="/api/weekends"
+                    data-role="suggested-weekend"
+                    data-start={sw.start}
+                    data-end={sw.end}
+                    data-label={label}
+                    style="margin:0;"
+                  >
+                    <input type="hidden" name="tripId" value={trip.id} />
+                    <input type="hidden" name="startDate" value={sw.start} />
+                    <input type="hidden" name="endDate" value={sw.end} />
+                    <button type="submit">{label}</button>
+                  </form>
                 );
               })}
             </div>
-          ))}
-        </>
-      )}
-    </section>
 
-        <section style="margin-top: 2rem;">
-      <h2>Viajeros</h2>
+            <h3 style="margin-top:1rem; font-size:1rem;">Añadir fin de semana manualmente</h3>
+            <form method="POST" action="/api/weekends" style="max-width:420px;">
+              <input type="hidden" name="tripId" value={trip.id} />
+              <label>
+                Fecha de inicio (viernes)
+                <input type="date" name="startDate" required />
+              </label>
+              <label>
+                Fecha de fin (domingo)
+                <input type="date" name="endDate" required />
+              </label>
+              <button type="submit" class="primary" style="margin-top:0.6rem;">
+                Guardar fin de semana
+              </button>
+            </form>
+          </div>
+        </section>
 
-      {participants.length === 0 ? (
-        <p>Aún no hay viajeros definidos para este viaje.</p>
-      ) : (
-        <ul>
-          {participants.map((p) => (
-            <li key={p.id}>
-              <strong>{p.display_name}</strong>
-              {p.email && <> – {p.email}</>}
-              <span style="color:#666; font-size:0.85rem;">
-                {' '}({new Date(p.created_at).toLocaleString('es-ES')})
-              </span>
-              <form
-                method="POST"
-                action="/api/participants/delete"
-                style="display:inline; margin-left:0.5rem;"
-              >
-                <input type="hidden" name="tripId" value={trip.id} />
-                <input type="hidden" name="participantId" value={p.id} />
-                <button
-                  type="submit"
-                  style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
-                >
-                  eliminar
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-      )}
+        {/* RESUMEN DISPONIBILIDAD + GRÁFICA */}
+        <section class="card card-span-2" data-section="resumen" data-collapsed="false">
+          <div class="card-header">
+            <h2>Resumen disponibilidad por finde</h2>
+            <button type="button" class="toggle-btn" data-toggle>Ocultar</button>
+          </div>
+          <div class="card-body">
+            {weekendStats.length === 0 ? (
+              <p>No hay fines de semana ni votos todavía.</p>
+            ) : (
+              <>
+                <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:0.6rem;">
+                  {topWeekends.map((w: any, i: number) => (
+                    <div class="chip-pill">
+                      <strong>#{i+1}</strong> {formatDate(w.start_date)} – {formatDate(w.end_date)}
+                    </div>
+                  ))}
+                </div>
 
-      <h3>Añadir viajero</h3>
-      <form method="POST" action="/api/participants" style="display:grid; gap:0.5rem; max-width:400px;">
-        <input type="hidden" name="tripId" value={trip.id} />
-        <label>
-          Nombre<br />
-          <input name="displayName" required style="width:100%; padding:0.3rem;" />
-        </label>
-        <label>
-          Email (opcional)<br />
-          <input name="email" type="email" style="width:100%; padding:0.3rem;" />
-        </label>
-        <button type="submit" style="margin-top:0.5rem; padding:0.4rem 0.8rem;">
-          Guardar viajero
-        </button>
-      </form>
-    </section>
+                <table data-weekends-table>
+                  <thead>
+                    <tr>
+                      <th>Finde</th>
+                      <th style="text-align:center;">✅ Pueden</th>
+                      <th style="text-align:center;">🤔 Quizás</th>
+                      <th style="text-align:center;">❌ No</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weekendsWithScores.map((w: any) => (
+                      <tr>
+                        <td>{formatDate(w.start_date)} – {formatDate(w.end_date)}</td>
+                        <td style="text-align:center;">{w.yes}</td>
+                        <td style="text-align:center;">{w.maybe}</td>
+                        <td style="text-align:center;">{w.no}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
+                <div class="chart-container">
+                  <canvas
+                    id="availabilityChart"
+                    data-labels={JSON.stringify(chartLabels)}
+                    data-yes={JSON.stringify(yesSeries)}
+                    data-maybe={JSON.stringify(maybeSeries)}
+                    data-no={JSON.stringify(noSeries)}
+                  ></canvas>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
 
+        {/* VUELOS */}
+        <section class="card card-span-2" data-section="vuelos" data-collapsed="false">
+          <div class="card-header">
+            <h2>Vuelos</h2>
+            <button type="button" class="toggle-btn" data-toggle>Ocultar</button>
+          </div>
+          <div class="card-body">
+            <form method="POST" action={`/api/trips/${trip.id}/refresh-flights`}>
+              <button type="submit" class="primary">
+                Actualizar vuelos (API)
+              </button>
+            </form>
 
-     <!-- Participantes -->
-    <section style="margin-top: 3rem;">
-      <h2>Participantes</h2>
-      {participants.length === 0 ? (
-        <p>Aún no hay nadie apuntado usando el enlace de invitación.</p>
-      ) : (
-        <ul>
-          {participants.map((p) => (
-            <li key={p.id}>
-              <strong>{p.display_name}</strong>
-              {p.email && <> – {p.email}</>}
-              <span style="color:#666; font-size:0.85rem;">
-                {' '}({new Date(p.created_at).toLocaleString('es-ES')})
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+            {destinations.length === 0 || weekends.length === 0 ? (
+              <p style="margin-top:1rem;">
+                Añade al menos un destino y un fin de semana para ver opciones de vuelo.
+              </p>
+            ) : flights.length === 0 ? (
+              <p style="margin-top:1rem;">
+                Aún no hay datos de vuelos guardados. Pulsa en "Actualizar vuelos" cuando tengas la API configurada.
+              </p>
+            ) : (
+              <>
+                {destinations.map((d) => (
+                  <div style="margin-top:1.5rem; padding:1rem; border:1px solid #1f2937; border-radius:0.8rem;">
+                    <h3 style="margin-top:0;">
+                      {d.name}
+                      {d.airport_code && <> ({d.airport_code})</>}
+                    </h3>
 
-    <!-- Resumen de fines de semana -->
-    <section style="margin-top: 2rem;">
-      <h2>Resumen disponibilidad por finde</h2>
-      {weekendStats.length === 0 ? (
-        <p>No hay fines de semana ni votos todavía.</p>
-      ) : (
-        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
-          <thead>
-            <tr>
-              <th style="text-align:left; padding:0.3rem; border-bottom:1px solid #ccc;">Finde</th>
-              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">✅ Pueden</th>
-              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">🤔 Quizás</th>
-              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">❌ No</th>
-            </tr>
-          </thead>
-          <tbody>
-            {weekendStats.map((w) => (
-              <tr key={w.id}>
-                <td style="padding:0.3rem; border-bottom:1px solid #eee;">
-                  {formatDate(w.start_date)} – {formatDate(w.end_date)}
-                </td>
-                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
-                  {w.yes_count}
-                </td>
-                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
-                  {w.maybe_count}
-                </td>
-                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
-                  {w.no_count}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+                    {weekends.map((w) => {
+                      const outboundDates = [
+                        new Date(w.start_date.getTime() - 2 * 24*60*60*1000),
+                        new Date(w.start_date.getTime() - 1 * 24*60*60*1000),
+                        w.start_date,
+                        new Date(w.start_date.getTime() + 1 * 24*60*60*1000),
+                      ];
+                      const returnDates = [
+                        w.end_date,
+                        new Date(w.end_date.getTime() + 1 * 24*60*60*1000),
+                        new Date(w.end_date.getTime() + 2 * 24*60*60*1000),
+                        new Date(w.end_date.getTime() + 3 * 24*60*60*1000),
+                      ];
 
-    <!-- Resumen destinos -->
-    <section style="margin-top: 2rem; margin-bottom:3rem;">
-      <h2>Ranking de destinos</h2>
-      {destinationStats.length === 0 ? (
-        <p>No hay destinos o aún no hay rankings.</p>
-      ) : (
-        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
-          <thead>
-            <tr>
-              <th style="text-align:left; padding:0.3rem; border-bottom:1px solid #ccc;">Destino</th>
-              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">Votos</th>
-              <th style="text-align:center; padding:0.3rem; border-bottom:1px solid #ccc;">Prioridad media</th>
-            </tr>
-          </thead>
-          <tbody>
-            {destinationStats.map((d) => (
-              <tr key={d.id}>
-                <td style="padding:0.3rem; border-bottom:1px solid #eee;">
-                  <strong>{d.name}</strong>
-                  {d.country && <> – {d.country}</>}
-                </td>
-                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
-                  {d.voters}
-                </td>
-                <td style="text-align:center; padding:0.3rem; border-bottom:1px solid #eee;">
-                  {d.avg_priority ? Number(d.avg_priority).toFixed(2) : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+                      return (
+                        <div style="margin-top:1rem;">
+                          <h4>
+                            Finde: {formatDate(w.start_date)} - {formatDate(w.end_date)}
+                          </h4>
+                          <div style="display:flex; flex-wrap:wrap; gap:1.5rem;">
+                            <div>
+                              <strong>Ida</strong>
+                              <ul>
+                                {outboundDates.map((dDate) => {
+                                  const dateStr = dDate.toISOString().slice(0,10);
+                                  const dayFlights = getFlightsFor(d.id, w.id, 'outbound', dateStr);
+                                  const minPrice = dayFlights[0]?.price_per_person;
 
-            <script type="module">
+                                  return (
+                                    <li>
+                                      {formatDate(dDate)}{' '}
+                                      {dayFlights.length === 0 ? (
+                                        <>– sin datos</>
+                                      ) : (
+                                        <>
+                                          – desde {minPrice} {dayFlights[0].currency}
+                                          <ul>
+                                            {dayFlights.map((f) => (
+                                              <li>
+                                                {f.airline || f.carrier_code || 'Vuelo'}
+                                                {f.flight_number && <> {f.flight_number}</>}:{' '}
+                                                {formatTimeEs(f.departure_time)} → {formatTimeEs(f.arrival_time)} ·{' '}
+                                                {f.price_per_person} {f.currency}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+
+                            <div>
+                              <strong>Vuelta</strong>
+                              <ul>
+                                {returnDates.map((dDate) => {
+                                  const dateStr = dDate.toISOString().slice(0,10);
+                                  const dayFlights = getFlightsFor(d.id, w.id, 'return', dateStr);
+                                  const minPrice = dayFlights[0]?.price_per_person;
+
+                                  return (
+                                    <li>
+                                      {formatDate(dDate)}{' '}
+                                      {dayFlights.length === 0 ? (
+                                        <>– sin datos</>
+                                      ) : (
+                                        <>
+                                          – desde {minPrice} {dayFlights[0].currency}
+                                          <ul>
+                                            {dayFlights.map((f) => (
+                                              <li>
+                                                {f.airline || f.carrier_code || 'Vuelo'}
+                                                {f.flight_number && <> {f.flight_number}</>}:{' '}
+                                                {formatTimeEs(f.departure_time)} → {formatTimeEs(f.arrival_time)} ·{' '}
+                                                {f.price_per_person} {f.currency}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* RANKINGS DESTINOS */}
+        <section class="card card-span-2" data-section="rankings" data-collapsed="false">
+          <div class="card-header">
+            <h2>Ranking de destinos</h2>
+            <button type="button" class="toggle-btn" data-toggle>Ocultar</button>
+          </div>
+          <div class="card-body">
+            <h3 style="font-size:1rem; margin-top:0;">Desde sugerencias de participantes</h3>
+            {suggestionRanking.length === 0 ? (
+              <p>No hay sugerencias de destinos todavía.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Destino</th>
+                    <th style="text-align:center;">País</th>
+                    <th style="text-align:center;">Personas</th>
+                    <th style="text-align:center;">Puntos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {suggestionRanking.map((s) => (
+                    <tr>
+                      <td>
+                        <strong>{s.name}</strong>
+                        {s.matchedDestinationId ? (
+                          <> – <small>coincide con destino existente</small></>
+                        ) : null}
+                      </td>
+                      <td style="text-align:center;">{s.country ?? '—'}</td>
+                      <td style="text-align:center;">{s.voters}</td>
+                      <td style="text-align:center;">{s.points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <h3 style="font-size:1rem; margin-top:1.2rem;">Ranking desde votaciones</h3>
+            {destinationStats.length === 0 ? (
+              <p>No hay destinos o aún no hay rankings.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Destino</th>
+                    <th style="text-align:center;">Votos</th>
+                    <th style="text-align:center;">Prioridad media</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {destinationStats.map((d) => (
+                    <tr>
+                      <td>
+                        <strong>{d.name}</strong>
+                        {d.country && <> – {d.country}</>}
+                      </td>
+                      <td style="text-align:center;">{d.voters}</td>
+                      <td style="text-align:center;">
+                        {d.avg_priority ? Number(d.avg_priority).toFixed(2) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module">
+
+      const root = document.querySelector('[data-trip-root]');
+      const TRIP_ID = root ? Number(root.dataset.tripId || '0') : 0;
+
+      // --- Chart.js disponibilidad ---
+      const canvas = document.getElementById('availabilityChart');
+      if (canvas) {
+        const labels = JSON.parse(canvas.dataset.labels || '[]');
+        const yesData = JSON.parse(canvas.dataset.yes || '[]');
+        const maybeData = JSON.parse(canvas.dataset.maybe || '[]');
+        const noData = JSON.parse(canvas.dataset.no || '[]');
+
+        if (labels.length > 0) {
+          const ctx = canvas.getContext('2d');
+
+          const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: 'No',
+                  data: noData,
+                  backgroundColor: '#ef4444',
+                  borderColor: '#dc2626',
+                  borderWidth: 0,
+                  stack: 'a',
+                },
+                {
+                  label: 'Quizás',
+                  data: maybeData,
+                  backgroundColor: '#f59e0b',
+                  borderColor: '#d97706',
+                  borderWidth: 0,
+                  stack: 'a',
+                },
+                {
+                  label: 'Pueden',
+                  data: yesData,
+                  backgroundColor: '#10b981',
+                  borderColor: '#059669',
+                  borderWidth: 0,
+                  stack: 'a',
+                },
+              ],
+            },
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                x: {
+                  stacked: true,
+                  ticks: {
+                    callback: (value) => Math.abs(Number(value)),
+                    font: { size: 11, weight: '500' },
+                    color: '#94a3b8',
+                  },
+                  grid: {
+                    color: 'rgba(100, 116, 139, 0.1)',
+                    drawBorder: false,
+                  },
+                  beginAtZero: true,
+                },
+                y: {
+                  stacked: true,
+                  ticks: {
+                    font: { size: 12, weight: '500' },
+                    color: '#94a3b8',
+                  },
+                  grid: { display: false, drawBorder: false },
+                },
+              },
+              plugins: {
+                tooltip: {
+                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                  titleColor: '#f1f5f9',
+                  bodyColor: '#f1f5f9',
+                  borderColor: '#334155',
+                  borderWidth: 1,
+                  padding: 10,
+                  titleFont: { size: 12, weight: '600' },
+                  bodyFont: { size: 11, weight: '500' },
+                  callbacks: {
+                    label: (ctx) => {
+                      const v = ctx.raw;
+                      return `${ctx.dataset.label}: ${Math.abs(v)} personas`;
+                    },
+                  },
+                },
+                legend: {
+                  position: 'top',
+                  labels: {
+                    font: { size: 12, weight: '600' },
+                    color: '#f1f5f9',
+                    padding: 15,
+                    usePointStyle: true,
+                    pointStyle: 'circle',
+                  },
+                },
+              },
+            },
+          });
+
+          const rows = document.querySelectorAll('[data-weekends-table] tbody tr');
+          canvas.addEventListener('click', (evt) => {
+            const points = chart.getElementsAtEventForMode(
+              evt,
+              'nearest',
+              { intersect: true },
+              true
+            );
+            if (points.length === 0) return;
+            const index = points[0].index;
+            if (index < rows.length) {
+              const row = rows[index];
+              row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              const prev = row.style.backgroundColor;
+              row.style.backgroundColor = 'rgba(249, 115, 22, 0.18)';
+              setTimeout(() => { row.style.backgroundColor = prev; }, 600);
+            }
+          });
+
+          rows.forEach((row) => {
+            row.addEventListener('mouseenter', () => { row.style.opacity = '0.8'; });
+            row.addEventListener('mouseleave', () => { row.style.opacity = '1'; });
+          });
+        }
+      }
+
+      // --- Cards plegables ---
+      document.querySelectorAll('[data-section]').forEach((card) => {
+        const btn = card.querySelector('[data-toggle]');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const collapsed = card.getAttribute('data-collapsed') === 'true';
+          card.setAttribute('data-collapsed', collapsed ? 'false' : 'true');
+          btn.textContent = collapsed ? 'Ocultar' : 'Mostrar';
+        });
+      });
+
+      // --- Lógica fines de semana sugeridos / eliminar ---
       const suggestedContainer = document.querySelector('[data-suggested-container]');
       const weekendsList = document.querySelector('[data-weekends-list]');
-
-      // ID del viaje embebido desde el server
-      const TRIP_ID = Number({trip.id});
 
       function formatDateEs(dateStr) {
         const d = new Date(dateStr);
@@ -657,11 +1189,11 @@ const suggestedWeekends = (() => {
         return d.toLocaleDateString('es-ES', {
           weekday: 'short',
           day: '2-digit',
-          month: 'short'
+          month: 'short',
         });
       }
 
-      // ------- AÑADIR FINDE DESDE "SUGERIDOS" -------
+      // Añadir finde desde sugeridos (AJAX)
       suggestedContainer?.addEventListener('submit', async (event) => {
         const form = event.target.closest('form[data-role="suggested-weekend"]');
         if (!form) return;
@@ -669,12 +1201,11 @@ const suggestedWeekends = (() => {
         event.preventDefault();
 
         const fd = new FormData(form);
-        const tripId    = Number(fd.get('tripId') || {trip.id});
+        const tripId = Number(fd.get('tripId') || TRIP_ID);
         const startDate = String(fd.get('startDate') || '');
-        const endDate   = String(fd.get('endDate') || '');
+        const endDate = String(fd.get('endDate') || '');
 
         if (!startDate || !endDate) {
-          console.error('startDate/endDate vacíos al añadir finde sugerido');
           alert('Datos de fecha incompletos.');
           return;
         }
@@ -686,28 +1217,19 @@ const suggestedWeekends = (() => {
             body: JSON.stringify({ tripId, startDate, endDate }),
           });
 
-          // Éxito si no es error 4xx/5xx
           if (res.status >= 400) {
             console.error('Error añadiendo finde sugerido', await res.text());
             alert('No se ha podido añadir el fin de semana.');
             return;
           }
 
-          // Intentamos leer JSON, pero si falla no pasa nada
           let data = null;
-          try {
-            data = await res.json();
-          } catch (_) {
-            // puede ser un 303 sin cuerpo, no pasa nada
-          }
+          try { data = await res.json(); } catch (_) {}
 
-          // Quitamos el chip de sugeridos SIEMPRE en éxito
           form.remove();
 
-          // Añadir a la lista de fines seleccionados
           if (weekendsList) {
-            // Si el backend nos devolvió el finde con id, lo usamos
-            let wId   = data?.weekend?.id ?? null;
+            let wId = data?.weekend?.id ?? null;
             let start = data?.weekend?.start_date ?? startDate;
             let end   = data?.weekend?.end_date ?? endDate;
 
@@ -718,35 +1240,20 @@ const suggestedWeekends = (() => {
               form.dataset.label ||
               `${formatDateEs(startStr)} - ${formatDateEs(endStr)}`;
 
-            // Si no tenemos id (p.e. respuesta 303 sin JSON),
-            // no podremos borrar sin recargar, pero al menos
-            // visualmente se añade a la lista.
             const li = document.createElement('li');
             li.dataset.weekendStart = startStr;
             li.dataset.weekendEnd = endStr;
             li.dataset.weekendLabel = label;
-            if (wId) {
-              li.dataset.weekendId = String(wId);
-            }
+            if (wId) li.dataset.weekendId = String(wId);
 
             li.innerHTML = `
-              <strong>${label}</strong>
+              <span><strong>${label}</strong></span>
               ${
                 wId
-                  ? `<form
-                      method="POST"
-                      action="/api/weekends/delete"
-                      data-role="delete-weekend"
-                      style="display:inline; margin-left:0.5rem;"
-                    >
+                  ? `<form method="POST" action="/api/weekends/delete" data-role="delete-weekend">
                       <input type="hidden" name="tripId" value="${tripId}" />
                       <input type="hidden" name="weekendId" value="${wId}" />
-                      <button
-                        type="submit"
-                        style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
-                      >
-                        eliminar
-                      </button>
+                      <button type="submit" class="danger-link">eliminar</button>
                     </form>`
                   : ''
               }
@@ -760,7 +1267,7 @@ const suggestedWeekends = (() => {
         }
       });
 
-      // ------- ELIMINAR FINDE Y DEVOLVERLO A "SUGERIDOS" -------
+      // Eliminar finde y devolverlo a sugeridos
       weekendsList?.addEventListener('submit', async (event) => {
         const form = event.target.closest('form[data-role="delete-weekend"]');
         if (!form) return;
@@ -779,7 +1286,6 @@ const suggestedWeekends = (() => {
         const weekendId = Number(fd.get('weekendId') || '');
 
         if (!weekendId) {
-          console.error('weekendId vacío al eliminar finde');
           alert('No se ha podido identificar el fin de semana.');
           return;
         }
@@ -797,10 +1303,8 @@ const suggestedWeekends = (() => {
             return;
           }
 
-          // Quitamos el finde de la lista seleccionada
           li.remove();
 
-          // Lo volvemos a añadir a la zona de sugeridos
           if (suggestedContainer && start && end && label) {
             const newForm = document.createElement('form');
             newForm.method = 'POST';
@@ -815,12 +1319,7 @@ const suggestedWeekends = (() => {
               <input type="hidden" name="tripId" value="${tripId}">
               <input type="hidden" name="startDate" value="${start}">
               <input type="hidden" name="endDate" value="${end}">
-              <button
-                type="submit"
-                style="padding:0.3rem 0.6rem; border-radius:999px; border:1px solid #ccc; background:#f9f9f9; cursor:pointer;"
-              >
-                ${label}
-              </button>
+              <button type="submit">${label}</button>
             `;
 
             suggestedContainer.appendChild(newForm);
@@ -831,8 +1330,5 @@ const suggestedWeekends = (() => {
         }
       });
     </script>
-
-
-
   </body>
 </html>

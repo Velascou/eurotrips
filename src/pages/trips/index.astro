@@ -1,10 +1,12 @@
 ---
 import { pool } from '../../lib/db';
+import '../../styles/global.css';
 
 type Trip = {
   id: number;
   name: string;
   origin_city: string;
+  origin_airport_code: string;
   currency: string;
   created_at: string;
 };
@@ -17,49 +19,251 @@ const trips = result.rows;
   <head>
     <meta charset="utf-8" />
     <title>Viajes con amigos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg: #0f172a;
+        --fg: #f1f5f9;
+        --card: #1e293b;
+        --card-border: #334155;
+        --muted: #94a3b8;
+        --accent: #f97316;
+        --accent-soft: rgba(249, 115, 22, 0.08);
+        --good: #22c55e;
+        --maybe: #eab308;
+        --bad: #f97373;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-size: 1rem;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+
+      .shell {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+      }
+
+      header {
+        margin-bottom: 2rem;
+      }
+
+      header h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0.5rem 0 1rem;
+        color: var(--fg);
+      }
+
+      header p {
+        color: var(--muted);
+        margin: 0.5rem 0;
+        font-size: 0.9rem;
+      }
+
+      .chip {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+      }
+
+      .btn-link {
+        text-decoration: none;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        border: none;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        opacity: 0.9;
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--card-border);
+      }
+
+      .btn-ghost:hover {
+        background: rgba(15, 23, 42, 0.4);
+        color: var(--fg);
+      }
+
+      .trip-list {
+        display: grid;
+        gap: 1rem;
+        list-style: none;
+      }
+
+      .trip-item {
+        padding: 1.2rem;
+        border-radius: 0.8rem;
+        background: var(--card);
+        border: 1px solid var(--card-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        transition: all 0.2s ease;
+      }
+
+      .trip-item:hover {
+        border-color: var(--accent);
+        background: rgba(249, 115, 22, 0.05);
+      }
+
+      .trip-info {
+        flex: 1;
+      }
+
+      .trip-name {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--fg);
+        margin-bottom: 0.3rem;
+      }
+
+      .trip-meta {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .trip-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .btn-action {
+        padding: 0.4rem 0.8rem;
+        border-radius: 0.4rem;
+        border: none;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .btn-enter {
+        background: var(--accent);
+        color: white;
+      }
+
+      .btn-enter:hover {
+        opacity: 0.9;
+      }
+
+      .btn-delete {
+        background: none;
+        border: none;
+        color: var(--bad);
+        cursor: pointer;
+        font-size: 0.8rem;
+        transition: all 0.2s ease;
+      }
+
+      .btn-delete:hover {
+        color: #ff6b6b;
+      }
+
+      .create-button {
+        display: inline-block;
+        margin-bottom: 1.5rem;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: var(--muted);
+      }
+    </style>
   </head>
-  <body style="font-family: system-ui; max-width: 800px; margin: 2rem auto;">
-    <h1>Viajes creados</h1>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="chip">Tus viajes</div>
+        <h1>Viajes con amigos</h1>
+        <p>Organiza los mejores viajes en grupo</p>
+      </header>
 
-    <p>
-      <a href="/trips/new">➕ Crear nuevo viaje</a>
-    </p>
+      <main>
+        <div class="create-button">
+          <a href="/trips/new" class="btn-link">
+            <button class="btn btn-primary">➕ Crear nuevo viaje</button>
+          </a>
+        </div>
 
-    {trips.length === 0 ? (
-      <p>Aún no hay viajes. ¡Crea el primero!</p>
-    ) : (
-      <ul>
-        {trips.map((t) => (
-          <li key={t.id} style="margin-bottom:0.5rem;">
-            <strong>{t.name}</strong>
-            {' '}– origen: {t.origin_city}
-            {t.origin_airport_code && <> ({t.origin_airport_code})</>}
-
-            {/* Botón entrar */}
-            <a
-              href={`/trips/${t.id}`}
-              style="margin-left:0.5rem; padding:0.2rem 0.6rem; border:1px solid #ccc; border-radius:4px; text-decoration:none;"
-            >
-              Entrar
-            </a>
-
-            {/* Botón eliminar viaje */}
-            <form
-              method="POST"
-              action="/api/trips/delete"
-              style="display:inline; margin-left:0.5rem;"
-            >
-              <input type="hidden" name="tripId" value={t.id} />
-              <button
-                type="submit"
-                style="border:none; background:none; color:#c00; cursor:pointer; font-size:0.85rem;"
-              >
-                eliminar
-              </button>
-            </form>
-          </li>
-        ))}
-      </ul>
-    )}
+        {trips.length === 0 ? (
+          <div class="empty-state">
+            <p>Aún no hay viajes. ¡Crea el primero!</p>
+          </div>
+        ) : (
+          <ul class="trip-list">
+            {trips.map((t) => (
+              <li key={t.id} class="trip-item">
+                <div class="trip-info">
+                  <div class="trip-name">{t.name}</div>
+                  <div class="trip-meta">
+                    Origen: <strong>{t.origin_city}</strong>
+                    {t.origin_airport_code && <> ({t.origin_airport_code})</>}
+                    {' · '}Moneda: <strong>{t.currency}</strong>
+                  </div>
+                </div>
+                <div class="trip-actions">
+                  <a href={`/trips/${t.id}`} class="btn-link">
+                    <button class="btn-action btn-enter">Entrar</button>
+                  </a>
+                  <form
+                    method="POST"
+                    action="/api/trips/delete"
+                    style="display: inline;"
+                  >
+                    <input type="hidden" name="tripId" value={t.id} />
+                    <button
+                      type="submit"
+                      class="btn-action btn-delete"
+                      onclick="return confirm('¿Eliminar este viaje?');"
+                    >
+                      Eliminar
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </div>
   </body>
 </html>
