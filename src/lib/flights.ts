@@ -153,7 +153,7 @@ export async function fetchTop3FlightsForDate(
   try {
     // Dynamic import will be resolved by the bundler in dev/build.
     // We expect provider files under `src/lib/providers`.
-    const mod = await import(`./providers/${providerName}` as string);
+    const mod = await import(`./providers/${providerName}.js` as string);
     if (typeof mod.fetchTop3FlightsForDate === 'function') {
       return await mod.fetchTop3FlightsForDate(params);
     }
